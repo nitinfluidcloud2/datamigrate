@@ -1,0 +1,8 @@
+bin/
+*.creds
+!*.creds.example
+state.db
+coverage.out
+coverage.html
+configs/
+

@@ -1,0 +1,321 @@
+ubuntuadmin@migration-host:~$ ./datamigrate migrate start --plan configs/ubuntu10-plan.yaml
+2026-03-23T15:57:45Z INF connected to vCenter vcenter=https://pcc-147-135-35-91.ovh.us/sdk
+2026-03-23T15:57:45Z INF initializing migration plan=ubuntu10-migration vm=ubuntu10
+2026-03-23T15:57:46Z INF transport mode selected transport=iscsi
+2026-03-23T15:57:46Z INF migration initialized disks=1 plan=ubuntu10-migration
+Migration initialized: ubuntu10-migration
+VM: ubuntu10, Disks: 1
+Starting full sync (T0)...
+2026-03-23T15:57:46Z INF migration state transition from=CREATED to=FULL_SYNC
+2026-03-23T15:57:46Z INF resetting CBT (full disable/enable cycle) vm=ubuntu10
+2026-03-23T15:57:46Z INF CBT disabled
+2026-03-23T15:57:46Z INF creating snapshot snapshot=datamigrate-cbt-reset-1 vm=ubuntu10
+2026-03-23T15:57:47Z INF snapshot created snapshot_ref=snapshot-2223
+2026-03-23T15:57:47Z INF removing snapshot by MoRef moref=snapshot-2223
+2026-03-23T15:57:47Z INF snapshot removed moref=snapshot-2223
+2026-03-23T15:57:47Z INF CBT re-enabled
+2026-03-23T15:57:47Z INF creating snapshot snapshot=datamigrate-cbt-reset-2 vm=ubuntu10
+2026-03-23T15:57:48Z INF snapshot created snapshot_ref=snapshot-2224
+2026-03-23T15:57:48Z INF removing snapshot by MoRef moref=snapshot-2224
+2026-03-23T15:57:48Z INF snapshot removed moref=snapshot-2224
+2026-03-23T15:57:48Z INF CBT reset complete
+2026-03-23T15:57:48Z INF creating snapshot snapshot=datamigrate-t0-ubuntu10-migration vm=ubuntu10
+2026-03-23T15:57:48Z INF snapshot created snapshot_ref=snapshot-2225
+2026-03-23T15:57:48Z INF setting up Nutanix Volume Group for iSCSI transport
+2026-03-23T15:57:48Z INF creating volume group cluster=00063ca3-b484-4dba-605d-66f6fc6cf210 disks=1 name=datamigrate-ubuntu10
+2026-03-23T15:57:49Z INF waiting for Nutanix v4 task task=ZXJnb24=:5b5f5a9a-cc2f-401c-8af7-8b137d1be997
+2026-03-23T15:57:55Z INF v4 task completed task=ZXJnb24=:5b5f5a9a-cc2f-401c-8af7-8b137d1be997
+2026-03-23T15:57:55Z INF waiting for Nutanix v4 task task=ZXJnb24=:39c33ef0-e2e9-4e84-828a-b6a666c7d9e5
+2026-03-23T15:57:58Z INF v4 task completed task=ZXJnb24=:39c33ef0-e2e9-4e84-828a-b6a666c7d9e5
+2026-03-23T15:57:58Z INF disk added to volume group index=0 size_bytes=53687091200
+2026-03-23T15:57:58Z INF volume group created iscsi_target=iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad uuid=a49de8e5-8272-41fc-6338-98532deeb8ad
+2026-03-23T15:57:58Z INF volume group created for migration disks=1 iscsi_target=iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad vg_uuid=a49de8e5-8272-41fc-6338-98532deeb8ad
+2026-03-23T15:57:58Z INF attaching iSCSI client to volume group initiator_iqn=iqn.2026-01.com.datamigrate:initiator vg=a49de8e5-8272-41fc-6338-98532deeb8ad
+2026-03-23T15:57:58Z INF waiting for Nutanix v4 task task=ZXJnb24=:451b9ce0-ae5b-4e06-9358-71fded9a3dd3
+2026-03-23T15:58:02Z INF v4 task completed task=ZXJnb24=:451b9ce0-ae5b-4e06-9358-71fded9a3dd3
+2026-03-23T15:58:02Z INF iSCSI client attached to volume group initiator_iqn=iqn.2026-01.com.datamigrate:initiator vg=a49de8e5-8272-41fc-6338-98532deeb8ad
+2026-03-23T15:58:02Z INF starting full sync for disk capacity=53687091200 disk_key=2000 file="[ssd-002032] ubuntu10/ubuntu10.vmdk" transport=iscsi
+2026-03-23T15:58:02Z INF snapshot disk backing changeId change_id="52 b2 78 99 c3 64 f7 27-15 8a 66 e0 19 d5 4e 4d/5" disk_key=2000
+2026-03-23T15:58:02Z INF changeId saved to state change_id="52 b2 78 99 c3 64 f7 27-15 8a 66 e0 19 d5 4e 4d/5" disk_key=2000
+2026-03-23T15:58:02Z INF querying CBT for allocated extents (iSCSI T0) disk_key=2000
+2026-03-23T15:58:02Z INF querying changed blocks change_id=* disk_key=2000 vm=ubuntu10
+2026-03-23T15:58:02Z INF snapshot disk backing changeId change_id="52 b2 78 99 c3 64 f7 27-15 8a 66 e0 19 d5 4e 4d/5" disk_key=2000
+2026-03-23T15:58:02Z WRN CBT query with changeId=* failed, falling back to full sequential read error="querying changed disk areas: ServerFaultCode: A specified parameter was not correct: startOffset" disk_key=2000
+2026-03-23T15:58:02Z INF opening raw datastore disk reader capacity_bytes=53687091200 datastore=ssd-002032 disk_key=2000 flat_path=ubuntu10/ubuntu10-flat.vmdk vm=ubuntu10 vmdk_path=ubuntu10/ubuntu10.vmdk
+2026-03-23T15:58:02Z INF raw datastore download stream opened capacity=53687091200 content_length=-1 flat_path=ubuntu10/ubuntu10-flat.vmdk
+2026-03-23T15:58:03Z INF found cluster data services IP data_services_ip=172.16.3.254
+2026-03-23T15:58:03Z INF iSCSI portal selected port=3260 portal_ip=172.16.3.254
+2026-03-23T15:58:03Z INF connecting to iSCSI target (pure Go) portal=172.16.3.254:3260 target=iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad
+2026-03-23T15:58:03Z INF starting SendTargets discovery portal=172.16.3.254:3260
+2026-03-23T15:58:03Z INF SendTargets discovery complete count=0
+2026-03-23T15:58:03Z INF sending iSCSI login request data_len=467 initiator_name=iqn.2026-01.com.datamigrate:initiator phase="single-phase CSG=00→NSG=11" target_name=iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad
+2026-03-23T15:58:03Z INF iSCSI login response received csg=0 flags=128 nsg=0 opcode=63 status_class=0 status_detail=0 transit=true
+2026-03-23T15:58:03Z INF single-phase login rejected, trying two-phase login
+2026-03-23T15:58:03Z INF sending iSCSI login phase 1 (security: CSG=00→NSG=01)
+2026-03-23T15:58:03Z INF phase 1 response expCmdSN=1 flags=129 maxCmdSN=512 nsg=1 opcode=35 resp_data="TargetPortalGroupTag=1\x00AuthMethod=None\x00" statSN=0 status_class=0 status_detail=0 transit=true tsih=0
+2026-03-23T15:58:03Z INF sending iSCSI login phase 2 (operational: CSG=01→NSG=11) cmdSN=1 expStatSN=1 tsih=0
+2026-03-23T15:58:03Z INF phase 2 response flags=5 opcode=35 resp_data="TargetAddress=172.16.1.2:3205\x00MaxRecvDataSegmentLength=1048576\x00ImmediateData=No\x00DefaultTime2Wait=0\x00DataSequenceInOrder=Yes\x00InitialR2T=Yes\x00DataDigest=None\x00MaxBurstLength=16777216\x00DefaultTime2Retain=20\x00DataPDUInOrder=Yes\x00FirstBurstLength=262144\x00MaxConnections=1\x00MaxOutstandingR2T=1\x00HeaderDigest=None\x00ErrorRecoveryLevel=0\x00" statSN=1 status_class=1 status_detail=1
+2026-03-23T15:58:03Z INF iSCSI target redirect — reconnecting to CVM Stargate current_portal=172.16.3.254:3260 redirect_to=172.16.1.2:3205
+2026-03-23T15:58:03Z INF connected to redirected CVM connected_to=172.16.1.2:3205
+2026-03-23T15:58:03Z INF sending iSCSI login phase 1 (security: CSG=00→NSG=01)
+2026-03-23T15:58:03Z INF phase 1 response expCmdSN=1 flags=129 maxCmdSN=512 nsg=1 opcode=35 resp_data="TargetPortalGroupTag=1\x00AuthMethod=None\x00" statSN=0 status_class=0 status_detail=0 transit=true tsih=0
+2026-03-23T15:58:03Z INF sending iSCSI login phase 2 (operational: CSG=01→NSG=11) cmdSN=1 expStatSN=1 tsih=0
+2026-03-23T15:58:03Z INF phase 2 response flags=135 opcode=35 resp_data="MaxRecvDataSegmentLength=1048576\x00ImmediateData=No\x00DefaultTime2Wait=0\x00DataSequenceInOrder=Yes\x00InitialR2T=Yes\x00DataDigest=None\x00MaxBurstLength=16777216\x00DefaultTime2Retain=20\x00DataPDUInOrder=Yes\x00FirstBurstLength=262144\x00MaxConnections=1\x00MaxOutstandingR2T=1\x00HeaderDigest=None\x00ErrorRecoveryLevel=0\x00" statSN=1 status_class=0 status_detail=0
+2026-03-23T15:58:03Z INF negotiated MaxRecvDataSegmentLength value=1048576
+2026-03-23T15:58:03Z INF negotiated ImmediateData value=false
+2026-03-23T15:58:03Z INF negotiated InitialR2T value=true
+2026-03-23T15:58:03Z INF iSCSI two-phase login succeeded — in full feature phase cmdSN=1 expStatSN=2
+2026-03-23T15:58:03Z INF iSCSI login successful — final negotiated params cmdSN=1 expStatSN=2 first_burst=262144 immediate_data=false initial_r2t=true max_burst=16777216 max_recv_segment=1048576 portal=172.16.1.2:3205 target=iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad
+2026-03-23T15:58:03Z INF sending READ CAPACITY(10) cmdSN=1
+2026-03-23T15:58:03Z INF READ CAPACITY result — disk geometry block_size=512 capacity_bytes=53687091200 capacity_gb=50 last_lba=104857599 total_sectors=104857600
+2026-03-23T15:58:03Z INF sending REPORT LUNS
+2026-03-23T15:58:03Z INF REPORT LUNS result lun_list_length=8 num_luns=1
+2026-03-23T15:58:03Z INF reported LUN index=0 lun_bytes=0000000000000000
+2026-03-23T15:58:03Z INF iSCSI connected (pure Go initiator) portal=172.16.3.254:3260 target=iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad
+2026-03-23T15:58:03Z INF iSCSI writer connected to Volume Group device=iscsi://172.16.1.2:3205/iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad disk_key=2000
+2026-03-23T15:58:03Z INF starting transfer pipeline channel_buffer=16 concurrency=4 extents=1 total_bytes=53687091200 total_mb=51200
+2026-03-23T15:58:03Z INF reading raw flat disk from datastore capacity_mb=51200 chunk_size_mb=64
+  [disk-2000] 1.1% (576.00 MB / 50.00 GB) @ 27.47 MB/s ETA: 30m42s2026-03-23T15:58:23Z INF raw reader progress bytes_read_mb=640 capacity_mb=51200 chunks_sent=10 heap_mb=197 progress_pct=1.25
+  [disk-2000] 2.1% (1.06 GB / 50.00 GB) @ 41.61 MB/s ETA: 20m4s2026-03-23T15:58:30Z INF raw reader progress bytes_read_mb=1280 capacity_mb=51200 chunks_sent=20 heap_mb=262 progress_pct=2.5
+  [disk-2000] 3.1% (1.56 GB / 50.00 GB) @ 50.48 MB/s ETA: 16m22s2026-03-23T15:58:37Z INF raw reader progress bytes_read_mb=1920 capacity_mb=51200 chunks_sent=30 heap_mb=133 progress_pct=3.75
+  [disk-2000] 4.1% (2.06 GB / 50.00 GB) @ 57.32 MB/s ETA: 14m16s2026-03-23T15:58:43Z INF raw reader progress bytes_read_mb=2560 capacity_mb=51200 chunks_sent=40 heap_mb=197 progress_pct=5
+  [disk-2000] 5.1% (2.56 GB / 50.00 GB) @ 62.07 MB/s ETA: 13m2s2026-03-23T15:58:49Z INF raw reader progress bytes_read_mb=3200 capacity_mb=51200 chunks_sent=50 heap_mb=261 progress_pct=6.25
+  [disk-2000] 7.2% (3.62 GB / 50.00 GB) @ 69.80 MB/s ETA: 11m20s2026-03-23T15:58:56Z INF raw reader progress bytes_read_mb=3840 capacity_mb=51200 chunks_sent=60 heap_mb=133 progress_pct=7.5
+  [disk-2000] 8.2% (4.12 GB / 50.00 GB) @ 71.96 MB/s ETA: 10m52s2026-03-23T15:59:03Z INF raw reader progress bytes_read_mb=4480 capacity_mb=51200 chunks_sent=70 heap_mb=197 progress_pct=8.75
+2026-03-23T15:59:03Z INF disk copy in progress copied="4480/51200 MB" disk_key=2000 eta=10m41s progress=8.8% rate="72.8 MB/s"
+  [disk-2000] 9.2% (4.62 GB / 50.00 GB) @ 73.59 MB/s ETA: 10m31s2026-03-23T15:59:10Z INF raw reader progress bytes_read_mb=5120 capacity_mb=51200 chunks_sent=80 heap_mb=261 progress_pct=10
+  [disk-2000] 10.2% (5.12 GB / 50.00 GB) @ 75.20 MB/s ETA: 10m11s2026-03-23T15:59:16Z INF raw reader progress bytes_read_mb=5760 capacity_mb=51200 chunks_sent=90 heap_mb=133 progress_pct=11.25
+  [disk-2000] 12.2% (6.12 GB / 50.00 GB) @ 77.89 MB/s ETA: 9m36s2026-03-23T15:59:23Z INF raw reader progress bytes_read_mb=6400 capacity_mb=51200 chunks_sent=100 heap_mb=197 progress_pct=12.5
+  [disk-2000] 13.2% (6.62 GB / 50.00 GB) @ 78.99 MB/s ETA: 9m22s2026-03-23T15:59:30Z INF raw reader progress bytes_read_mb=7040 capacity_mb=51200 chunks_sent=110 heap_mb=262 progress_pct=13.750000000000002
+  [disk-2000] 14.2% (7.12 GB / 50.00 GB) @ 80.23 MB/s ETA: 9m7s2026-03-23T15:59:36Z INF raw reader progress bytes_read_mb=7680 capacity_mb=51200 chunks_sent=120 heap_mb=133 progress_pct=15
+  [disk-2000] 15.2% (7.62 GB / 50.00 GB) @ 81.35 MB/s ETA: 8m53s2026-03-23T15:59:42Z INF raw reader progress bytes_read_mb=8320 capacity_mb=51200 chunks_sent=130 heap_mb=197 progress_pct=16.25
+  [disk-2000] 17.4% (8.69 GB / 50.00 GB) @ 83.13 MB/s ETA: 8m28s2026-03-23T15:59:49Z INF raw reader progress bytes_read_mb=8960 capacity_mb=51200 chunks_sent=140 heap_mb=262 progress_pct=17.5
+  [disk-2000] 18.4% (9.19 GB / 50.00 GB) @ 83.81 MB/s ETA: 8m18s2026-03-23T15:59:56Z INF raw reader progress bytes_read_mb=9600 capacity_mb=51200 chunks_sent=150 heap_mb=133 progress_pct=18.75
+  [disk-2000] 19.4% (9.69 GB / 50.00 GB) @ 84.25 MB/s ETA: 8m9s2026-03-23T16:00:03Z INF disk copy in progress copied="10112/51200 MB" disk_key=2000 eta=8m14s progress=19.8% rate="83.1 MB/s"
+2026-03-23T16:00:05Z INF raw reader progress bytes_read_mb=10240 capacity_mb=51200 chunks_sent=160 heap_mb=197 progress_pct=20
+  [disk-2000] 20.8% (10.38 GB / 50.00 GB) @ 82.29 MB/s ETA: 8m13s2026-03-23T16:00:14Z INF raw reader progress bytes_read_mb=10880 capacity_mb=51200 chunks_sent=170 heap_mb=262 progress_pct=21.25
+  [disk-2000] 21.6% (10.81 GB / 50.00 GB) @ 82.41 MB/s ETA: 8m6s2026-03-23T16:00:21Z INF raw reader progress bytes_read_mb=11520 capacity_mb=51200 chunks_sent=180 heap_mb=133 progress_pct=22.5
+  [disk-2000] 23.6% (11.81 GB / 50.00 GB) @ 83.42 MB/s ETA: 7m48s2026-03-23T16:00:27Z INF raw reader progress bytes_read_mb=12160 capacity_mb=51200 chunks_sent=190 heap_mb=197 progress_pct=23.75
+  [disk-2000] 24.6% (12.31 GB / 50.00 GB) @ 83.79 MB/s ETA: 7m40s2026-03-23T16:00:34Z INF raw reader progress bytes_read_mb=12800 capacity_mb=51200 chunks_sent=200 heap_mb=262 progress_pct=25
+  [disk-2000] 25.6% (12.81 GB / 50.00 GB) @ 84.06 MB/s ETA: 7m33s2026-03-23T16:00:41Z INF raw reader progress bytes_read_mb=13440 capacity_mb=51200 chunks_sent=210 heap_mb=133 progress_pct=26.25
+  [disk-2000] 26.6% (13.31 GB / 50.00 GB) @ 84.51 MB/s ETA: 7m24s2026-03-23T16:00:47Z INF raw reader progress bytes_read_mb=14080 capacity_mb=51200 chunks_sent=220 heap_mb=197 progress_pct=27.500000000000004
+  [disk-2000] 28.6% (14.31 GB / 50.00 GB) @ 85.21 MB/s ETA: 7m8s2026-03-23T16:00:54Z INF raw reader progress bytes_read_mb=14720 capacity_mb=51200 chunks_sent=230 heap_mb=262 progress_pct=28.749999999999996
+  [disk-2000] 29.6% (14.81 GB / 50.00 GB) @ 85.57 MB/s ETA: 7m1s2026-03-23T16:01:01Z INF raw reader progress bytes_read_mb=15360 capacity_mb=51200 chunks_sent=240 heap_mb=133 progress_pct=30
+2026-03-23T16:01:04Z INF disk copy in progress copied="15616/51200 MB" disk_key=2000 eta=6m55s progress=30.5% rate="85.7 MB/s"
+  [disk-2000] 30.6% (15.31 GB / 50.00 GB) @ 85.77 MB/s ETA: 6m54s2026-03-23T16:01:08Z INF raw reader progress bytes_read_mb=16000 capacity_mb=51200 chunks_sent=250 heap_mb=197 progress_pct=31.25
+  [disk-2000] 31.6% (15.81 GB / 50.00 GB) @ 86.02 MB/s ETA: 6m46s2026-03-23T16:01:14Z INF raw reader progress bytes_read_mb=16640 capacity_mb=51200 chunks_sent=260 heap_mb=262 progress_pct=32.5
+  [disk-2000] 33.6% (16.81 GB / 50.00 GB) @ 86.77 MB/s ETA: 6m31s2026-03-23T16:01:21Z INF raw reader progress bytes_read_mb=17280 capacity_mb=51200 chunks_sent=270 heap_mb=133 progress_pct=33.75
+  [disk-2000] 34.6% (17.31 GB / 50.00 GB) @ 86.98 MB/s ETA: 6m24s2026-03-23T16:01:28Z INF raw reader progress bytes_read_mb=17920 capacity_mb=51200 chunks_sent=280 heap_mb=197 progress_pct=35
+  [disk-2000] 35.6% (17.81 GB / 50.00 GB) @ 87.19 MB/s ETA: 6m18s2026-03-23T16:01:34Z INF raw reader progress bytes_read_mb=18560 capacity_mb=51200 chunks_sent=290 heap_mb=262 progress_pct=36.25
+  [disk-2000] 36.6% (18.31 GB / 50.00 GB) @ 87.34 MB/s ETA: 6m11s2026-03-23T16:01:41Z INF raw reader progress bytes_read_mb=19200 capacity_mb=51200 chunks_sent=300 heap_mb=133 progress_pct=37.5
+  [disk-2000] 38.5% (19.25 GB / 50.00 GB) @ 87.50 MB/s ETA: 5m59s2026-03-23T16:01:48Z INF raw reader progress bytes_read_mb=19840 capacity_mb=51200 chunks_sent=310 heap_mb=197 progress_pct=38.75
+  [disk-2000] 39.4% (19.69 GB / 50.00 GB) @ 87.45 MB/s ETA: 5m54s2026-03-23T16:01:56Z INF raw reader progress bytes_read_mb=20480 capacity_mb=51200 chunks_sent=320 heap_mb=262 progress_pct=40
+  [disk-2000] 41.1% (20.56 GB / 50.00 GB) @ 87.40 MB/s ETA: 5m44s2026-03-23T16:02:03Z INF raw reader progress bytes_read_mb=21120 capacity_mb=51200 chunks_sent=330 heap_mb=133 progress_pct=41.25
+2026-03-23T16:02:04Z INF disk copy in progress copied="21248/51200 MB" disk_key=2000 eta=5m42s progress=41.5% rate="87.5 MB/s"
+  [disk-2000] 42.1% (21.06 GB / 50.00 GB) @ 87.58 MB/s ETA: 5m38s2026-03-23T16:02:10Z INF raw reader progress bytes_read_mb=21760 capacity_mb=51200 chunks_sent=340 heap_mb=197 progress_pct=42.5
+  [disk-2000] 43.1% (21.56 GB / 50.00 GB) @ 87.76 MB/s ETA: 5m31s2026-03-23T16:02:17Z INF raw reader progress bytes_read_mb=22400 capacity_mb=51200 chunks_sent=350 heap_mb=262 progress_pct=43.75
+  [disk-2000] 44.1% (22.06 GB / 50.00 GB) @ 87.82 MB/s ETA: 5m25s2026-03-23T16:02:23Z INF raw reader progress bytes_read_mb=23040 capacity_mb=51200 chunks_sent=360 heap_mb=133 progress_pct=45
+  [disk-2000] 46.0% (23.00 GB / 50.00 GB) @ 88.06 MB/s ETA: 5m13s2026-03-23T16:02:30Z INF raw reader progress bytes_read_mb=23680 capacity_mb=51200 chunks_sent=370 heap_mb=197 progress_pct=46.25
+  [disk-2000] 47.0% (23.50 GB / 50.00 GB) @ 88.17 MB/s ETA: 5m7s2026-03-23T16:02:37Z INF raw reader progress bytes_read_mb=24320 capacity_mb=51200 chunks_sent=380 heap_mb=262 progress_pct=47.5
+  [disk-2000] 48.0% (24.00 GB / 50.00 GB) @ 88.22 MB/s ETA: 5m1s2026-03-23T16:02:45Z INF raw reader progress bytes_read_mb=24960 capacity_mb=51200 chunks_sent=390 heap_mb=133 progress_pct=48.75
+  [disk-2000] 49.9% (24.94 GB / 50.00 GB) @ 88.07 MB/s ETA: 4m51s2026-03-23T16:02:53Z INF raw reader progress bytes_read_mb=25600 capacity_mb=51200 chunks_sent=400 heap_mb=197 progress_pct=50
+  [disk-2000] 50.6% (25.31 GB / 50.00 GB) @ 87.82 MB/s ETA: 4m47s2026-03-23T16:03:00Z INF raw reader progress bytes_read_mb=26240 capacity_mb=51200 chunks_sent=410 heap_mb=262 progress_pct=51.24999999999999
+  [disk-2000] 51.6% (25.81 GB / 50.00 GB) @ 87.86 MB/s ETA: 4m41s2026-03-23T16:03:05Z INF disk copy in progress copied="26624/51200 MB" disk_key=2000 eta=4m39s progress=52.0% rate="87.9 MB/s"
+2026-03-23T16:03:08Z INF raw reader progress bytes_read_mb=26880 capacity_mb=51200 chunks_sent=420 heap_mb=133 progress_pct=52.5
+  [disk-2000] 53.5% (26.75 GB / 50.00 GB) @ 87.92 MB/s ETA: 4m30s2026-03-23T16:03:14Z INF raw reader progress bytes_read_mb=27520 capacity_mb=51200 chunks_sent=430 heap_mb=197 progress_pct=53.75
+  [disk-2000] 54.5% (27.25 GB / 50.00 GB) @ 88.06 MB/s ETA: 4m24s2026-03-23T16:03:21Z INF raw reader progress bytes_read_mb=28160 capacity_mb=51200 chunks_sent=440 heap_mb=262 progress_pct=55.00000000000001
+  [disk-2000] 55.5% (27.75 GB / 50.00 GB) @ 88.19 MB/s ETA: 4m18s2026-03-23T16:03:28Z INF raw reader progress bytes_read_mb=28800 capacity_mb=51200 chunks_sent=450 heap_mb=133 progress_pct=56.25
+  [disk-2000] 56.5% (28.25 GB / 50.00 GB) @ 88.26 MB/s ETA: 4m12s2026-03-23T16:03:35Z INF raw reader progress bytes_read_mb=29440 capacity_mb=51200 chunks_sent=460 heap_mb=197 progress_pct=57.49999999999999
+  [disk-2000] 58.5% (29.25 GB / 50.00 GB) @ 88.51 MB/s ETA: 4m0s2026-03-23T16:03:41Z INF raw reader progress bytes_read_mb=30080 capacity_mb=51200 chunks_sent=470 heap_mb=262 progress_pct=58.75
+  [disk-2000] 59.5% (29.75 GB / 50.00 GB) @ 88.59 MB/s ETA: 3m54s2026-03-23T16:03:48Z INF raw reader progress bytes_read_mb=30720 capacity_mb=51200 chunks_sent=480 heap_mb=133 progress_pct=60
+  [disk-2000] 60.5% (30.25 GB / 50.00 GB) @ 88.65 MB/s ETA: 3m48s2026-03-23T16:03:55Z INF raw reader progress bytes_read_mb=31360 capacity_mb=51200 chunks_sent=490 heap_mb=197 progress_pct=61.25000000000001
+  [disk-2000] 62.4% (31.19 GB / 50.00 GB) @ 88.75 MB/s ETA: 3m37s2026-03-23T16:04:02Z INF raw reader progress bytes_read_mb=32000 capacity_mb=51200 chunks_sent=500 heap_mb=262 progress_pct=62.5
+2026-03-23T16:04:05Z INF disk copy in progress copied="32256/51200 MB" disk_key=2000 eta=3m33s progress=63.0% rate="88.7 MB/s"
+  [disk-2000] 63.2% (31.62 GB / 50.00 GB) @ 88.73 MB/s ETA: 3m32s2026-03-23T16:04:09Z INF raw reader progress bytes_read_mb=32640 capacity_mb=51200 chunks_sent=510 heap_mb=133 progress_pct=63.74999999999999
+  [disk-2000] 64.1% (32.06 GB / 50.00 GB) @ 88.69 MB/s ETA: 3m27s2026-03-23T16:04:17Z INF raw reader progress bytes_read_mb=33280 capacity_mb=51200 chunks_sent=520 heap_mb=197 progress_pct=65
+  [disk-2000] 65.9% (32.94 GB / 50.00 GB) @ 88.63 MB/s ETA: 3m17s2026-03-23T16:04:24Z INF raw reader progress bytes_read_mb=33920 capacity_mb=51200 chunks_sent=530 heap_mb=262 progress_pct=66.25
+  [disk-2000] 66.9% (33.44 GB / 50.00 GB) @ 88.74 MB/s ETA: 3m11s2026-03-23T16:04:31Z INF raw reader progress bytes_read_mb=34560 capacity_mb=51200 chunks_sent=540 heap_mb=133 progress_pct=67.5
+  [disk-2000] 67.9% (33.94 GB / 50.00 GB) @ 88.84 MB/s ETA: 3m5s2026-03-23T16:04:37Z INF raw reader progress bytes_read_mb=35200 capacity_mb=51200 chunks_sent=550 heap_mb=197 progress_pct=68.75
+  [disk-2000] 69.9% (34.94 GB / 50.00 GB) @ 89.06 MB/s ETA: 2m53s2026-03-23T16:04:44Z INF raw reader progress bytes_read_mb=35840 capacity_mb=51200 chunks_sent=560 heap_mb=262 progress_pct=70
+  [disk-2000] 70.9% (35.44 GB / 50.00 GB) @ 89.18 MB/s ETA: 2m47s2026-03-23T16:04:51Z INF raw reader progress bytes_read_mb=36480 capacity_mb=51200 chunks_sent=570 heap_mb=133 progress_pct=71.25
+  [disk-2000] 71.9% (35.94 GB / 50.00 GB) @ 89.22 MB/s ETA: 2m41s2026-03-23T16:04:58Z INF raw reader progress bytes_read_mb=37120 capacity_mb=51200 chunks_sent=580 heap_mb=197 progress_pct=72.5
+  [disk-2000] 73.6% (36.81 GB / 50.00 GB) @ 89.03 MB/s ETA: 2m31s2026-03-23T16:05:06Z INF raw reader progress bytes_read_mb=37760 capacity_mb=51200 chunks_sent=590 heap_mb=262 progress_pct=73.75
+2026-03-23T16:05:06Z INF disk copy in progress copied="37760/51200 MB" disk_key=2000 eta=2m31s progress=73.8% rate="89.0 MB/s"
+  [disk-2000] 74.4% (37.19 GB / 50.00 GB) @ 88.82 MB/s ETA: 2m27s2026-03-23T16:05:14Z INF raw reader progress bytes_read_mb=38400 capacity_mb=51200 chunks_sent=600 heap_mb=133 progress_pct=75
+  [disk-2000] 75.4% (37.69 GB / 50.00 GB) @ 88.84 MB/s ETA: 2m21s2026-03-23T16:05:21Z INF raw reader progress bytes_read_mb=39040 capacity_mb=51200 chunks_sent=610 heap_mb=197 progress_pct=76.25
+  [disk-2000] 77.4% (38.69 GB / 50.00 GB) @ 89.06 MB/s ETA: 2m10s2026-03-23T16:05:27Z INF raw reader progress bytes_read_mb=39680 capacity_mb=51200 chunks_sent=620 heap_mb=262 progress_pct=77.5
+  [disk-2000] 78.2% (39.12 GB / 50.00 GB) @ 89.03 MB/s ETA: 2m5s2026-03-23T16:05:34Z INF raw reader progress bytes_read_mb=40320 capacity_mb=51200 chunks_sent=630 heap_mb=133 progress_pct=78.75
+  [disk-2000] 79.2% (39.62 GB / 50.00 GB) @ 89.05 MB/s ETA: 1m59s2026-03-23T16:05:41Z INF raw reader progress bytes_read_mb=40960 capacity_mb=51200 chunks_sent=640 heap_mb=197 progress_pct=80
+  [disk-2000] 80.4% (40.19 GB / 50.00 GB) @ 89.18 MB/s ETA: 1m52s2026-03-23T16:05:48Z INF raw reader progress bytes_read_mb=41600 capacity_mb=51200 chunks_sent=650 heap_mb=262 progress_pct=81.25
+  [disk-2000] 82.2% (41.12 GB / 50.00 GB) @ 89.23 MB/s ETA: 1m41s2026-03-23T16:05:55Z INF raw reader progress bytes_read_mb=42240 capacity_mb=51200 chunks_sent=660 heap_mb=133 progress_pct=82.5
+  [disk-2000] 83.1% (41.56 GB / 50.00 GB) @ 89.23 MB/s ETA: 1m36s2026-03-23T16:06:02Z INF raw reader progress bytes_read_mb=42880 capacity_mb=51200 chunks_sent=670 heap_mb=197 progress_pct=83.75
+  [disk-2000] 84.0% (42.00 GB / 50.00 GB) @ 89.20 MB/s ETA: 1m31s2026-03-23T16:06:06Z INF disk copy in progress copied="43264/51200 MB" disk_key=2000 eta=1m28s progress=84.5% rate="89.3 MB/s"
+2026-03-23T16:06:09Z INF raw reader progress bytes_read_mb=43520 capacity_mb=51200 chunks_sent=680 heap_mb=262 progress_pct=85
+  [disk-2000] 86.0% (43.00 GB / 50.00 GB) @ 89.30 MB/s ETA: 1m20s2026-03-23T16:06:16Z INF raw reader progress bytes_read_mb=44160 capacity_mb=51200 chunks_sent=690 heap_mb=133 progress_pct=86.25
+  [disk-2000] 87.0% (43.50 GB / 50.00 GB) @ 89.37 MB/s ETA: 1m14s2026-03-23T16:06:23Z INF raw reader progress bytes_read_mb=44800 capacity_mb=51200 chunks_sent=700 heap_mb=197 progress_pct=87.5
+  [disk-2000] 88.0% (44.00 GB / 50.00 GB) @ 89.40 MB/s ETA: 1m8s2026-03-23T16:06:30Z INF raw reader progress bytes_read_mb=45440 capacity_mb=51200 chunks_sent=710 heap_mb=262 progress_pct=88.75
+  [disk-2000] 89.0% (44.50 GB / 50.00 GB) @ 89.41 MB/s ETA: 1m2s2026-03-23T16:06:37Z INF raw reader progress bytes_read_mb=46080 capacity_mb=51200 chunks_sent=720 heap_mb=133 progress_pct=90
+  [disk-2000] 91.0% (45.50 GB / 50.00 GB) @ 89.47 MB/s ETA: 51s2026-03-23T16:06:44Z INF raw reader progress bytes_read_mb=46720 capacity_mb=51200 chunks_sent=730 heap_mb=197 progress_pct=91.25
+  [disk-2000] 91.8% (45.88 GB / 50.00 GB) @ 89.25 MB/s ETA: 47s2026-03-23T16:06:53Z INF raw reader progress bytes_read_mb=47360 capacity_mb=51200 chunks_sent=740 heap_mb=262 progress_pct=92.5
+  [disk-2000] 93.2% (46.62 GB / 50.00 GB) @ 88.77 MB/s ETA: 38s2026-03-23T16:07:03Z INF raw reader progress bytes_read_mb=48000 capacity_mb=51200 chunks_sent=750 heap_mb=133 progress_pct=93.75
+  [disk-2000] 93.9% (46.94 GB / 50.00 GB) @ 88.52 MB/s ETA: 35s2026-03-23T16:07:07Z INF disk copy in progress copied="48192/51200 MB" disk_key=2000 eta=34s progress=94.1% rate="88.4 MB/s"
+  [disk-2000] 94.5% (47.25 GB / 50.00 GB) @ 88.21 MB/s ETA: 31s2026-03-23T16:07:14Z INF raw reader progress bytes_read_mb=48640 capacity_mb=51200 chunks_sent=760 heap_mb=197 progress_pct=95
+  [disk-2000] 95.8% (47.88 GB / 50.00 GB) @ 87.75 MB/s ETA: 24s2026-03-23T16:07:24Z INF raw reader progress bytes_read_mb=49280 capacity_mb=51200 chunks_sent=770 heap_mb=262 progress_pct=96.25
+  [disk-2000] 97.2% (48.62 GB / 50.00 GB) @ 87.32 MB/s ETA: 16s2026-03-23T16:07:34Z INF raw reader progress bytes_read_mb=49920 capacity_mb=51200 chunks_sent=780 heap_mb=133 progress_pct=97.5
+2026-03-23T16:07:37Z INF raw disk read complete (EOF) total_chunks=784 total_read_mb=50144
+  [disk-2000] 97.9% (48.97 GB / 50.00 GB) @ 87.11 MB/s ETA: 12s2026-03-23T16:07:37Z INF transfer pipeline complete blocks=784 bytes=52579998856 mb=50144
+  [disk-2000] 97.9% (48.97 GB / 50.00 GB) @ 87.11 MB/s ETA: 12s
+2026-03-23T16:07:37Z INF iSCSI write finalized bytes_written=52579998856
+2026-03-23T16:07:37Z INF iSCSI disconnected target=iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad
+2026-03-23T16:07:37Z INF disk full sync complete change_id="52 b2 78 99 c3 64 f7 27-15 8a 66 e0 19 d5 4e 4d/5" disk_key=2000 transport=iscsi
+2026-03-23T16:07:37Z INF re-connected to vCenter vcenter=https://pcc-147-135-35-91.ovh.us/sdk
+2026-03-23T16:07:37Z INF removing tracked snapshot moref=snapshot-2225 snapshot=datamigrate-t0-ubuntu10-migration
+2026-03-23T16:07:37Z INF removing snapshot by MoRef moref=snapshot-2225
+2026-03-23T16:07:38Z INF snapshot removed moref=snapshot-2225
+2026-03-23T16:07:38Z INF migration state transition from=FULL_SYNC to=SYNCING
+
+Full sync complete: 50.00 GB transferred in 9m52s
+Full sync complete. Run 'datamigrate migrate sync' for incremental syncs.
+ubuntuadmin@migration-host:~$ ./cutover-vg-to-vm.sh
+=== Reading VG UUID from state.db ===
+  VG UUID: a49de8e5-8272-41fc-6338-98532deeb8ad
+  Target IQN: iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad
+
+=== Cutover: VG → qcow2 → Image → VM ===
+
+=== Step 1: Whitelist iSCSI initiator ===
+{"data":{"$reserved":{"$fv":"v4.r1"},"$objectType":"prism.v4.config.TaskReference","extId":"ZXJnb24=:85ec6101-110c-4b90-98bd-ef0597164079"},"$reserved":{"$fv":"v4.r1"},"$objectType":"volumes.v4.config.AttachIscsiClientApiResponse","metadata":{"flags":[{"$reserved":{"$fv":"v1.r0"},"$objectType":"common.v1.config.Flag","name":"hasError","value":false},{"$reserved":{"$fv":"v1.r0"},"$objectType":"common.v1.config.Flag","name":"isPaginated","value":false},{"$reserved":{"$fv":"v1.r0"},"$objectType":"common.v1.config.Flag","name":"isTruncated","value":false}],"$reserved":{"$fv":"v1.r0"},"$objectType":"common.v1.response.ApiResponseMetadata","links":[{"$reserved":{"$fv":"v1.r0"},"$objectType":"common.v1.response.ApiLink","href":"https://cluster-1919.nutanix.ovh.us:9440/api/prism/v4.0/config/tasks/ZXJnb24=:85ec6101-110c-4b90-98bd-ef0597164079","rel":"self"}]}}
+  Waiting for task...
+
+=== Step 2: Read VG over iSCSI → qcow2 ===
+  Portal: 172.16.3.254:3260
+  Target: iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad
+  Output: /tmp/ubuntu10-disk.qcow2
+
+real	0m9.873s
+user	0m0.563s
+sys	0m6.397s
+-rw-r--r-- 1 ubuntuadmin ubuntuadmin 6.1G Mar 23 16:09 /tmp/ubuntu10-disk.qcow2
+
+=== Step 3: Create Nutanix Image ===
+{"metadata": {"kind": "image", "use_categories_mapping": false, "uuid": "8d9c0f1b-d8e8-46c0-a742-e5f97cc6efdd", "spec_version": 0}, "api_version": "3.1", "spec": {"name": "ubuntu10-migrated-disk", "description": "Migrated from VMware VG", "resources": {"image_type": "DISK_IMAGE"}}, "status": {"state": "PENDING", "execution_context": {"task_uuid": "bea4a184-83eb-4c4b-a3ad-1d086119deb7"}}}
+  Image UUID: 8d9c0f1b-d8e8-46c0-a742-e5f97cc6efdd
+  Task UUID: bea4a184-83eb-4c4b-a3ad-1d086119deb7
+  Waiting for image task to complete...
+  [1] Task status: RUNNING
+  [2] Task status: RUNNING
+  [3] Task status: RUNNING
+  [4] Task status: SUCCEEDED
+  Image ready!
+
+=== Step 5: Upload qcow2 to Image ===
+  Uploading 6.1G...
+
+real	2m8.488s
+user	0m1.896s
+sys	0m3.299s
+
+  Upload complete. Waiting for image to become active...
+
+=== Step 6: Create VM ===
+{"metadata": {"kind": "vm", "use_categories_mapping": false, "uuid": "6e6ad8bc-dd33-4b0f-b9be-d01e10d19de6", "spec_version": 0}, "api_version": "3.1", "spec": {"name": "ubuntu10-ahv", "description": "Migrated from VMware", "resources": {"num_sockets": 1, "num_vcpus_per_socket": 1, "memory_size_mib": 2048, "power_state": "ON", "machine_type": "PC", "disk_list": [{"device_properties": {"disk_address": {"adapter_type": "SCSI", "device_index": 0}, "device_type": "DISK"}, "data_source_reference": {"kind": "image", "uuid": "8d9c0f1b-d8e8-46c0-a742-e5f97cc6efdd"}}], "nic_list": [], "boot_config": {"boot_type": "UEFI"}}, "cluster_reference": {"kind": "cluster", "uuid": "00063ca3-b484-4dba-605d-66f6fc6cf210"}}, "status": {"state": "PENDING", "execution_context": {"task_uuid": "f511260c-98d7-48d9-8cbb-e7dcd3870f19"}}}
+
+=========================================
+  Cutover complete!
+  VM: ubuntu10-ahv
+  Image: ubuntu10-migrated-disk (8d9c0f1b-d8e8-46c0-a742-e5f97cc6efdd)
+  Boot: UEFI
+=========================================
+
+--- Individual commands for manual execution ---
+
+# Step 1: Whitelist iSCSI initiator
+curl -sk -u $NUTANIX_USERNAME:$NUTANIX_PASSWORD -X POST -H "Content-Type: application/json" -H "NTNX-Request-Id: $(uuidgen)" -d '{"iscsiInitiatorName":"iqn.2026-01.com.datamigrate:initiator"}' "https://cluster-1919.nutanix.ovh.us:9440/api/volumes/v4.1/config/volume-groups/a49de8e5-8272-41fc-6338-98532deeb8ad/\$actions/attach-iscsi-client"
+
+# Step 2: Read VG over iSCSI → qcow2
+qemu-img convert --image-opts "driver=iscsi,transport=tcp,portal=172.16.3.254:3260,target=iqn.2010-06.com.nutanix:datamigrate-ubuntu10-a49de8e5-8272-41fc-6338-98532deeb8ad,lun=0,initiator-name=iqn.2026-01.com.datamigrate:initiator" -O qcow2 /tmp/ubuntu10-disk.qcow2
+
+# Step 3: Create image
+curl -sk -u $NUTANIX_USERNAME:$NUTANIX_PASSWORD -X POST -H "Content-Type: application/json" -d '{"spec":{"name":"ubuntu10-migrated-disk","description":"Migrated from VMware VG","resources":{"image_type":"DISK_IMAGE"}},"metadata":{"kind":"image"}}' "https://cluster-1919.nutanix.ovh.us:9440/api/nutanix/v3/images"
+
+# Step 4: Get image UUID
+curl -sk -u $NUTANIX_USERNAME:$NUTANIX_PASSWORD -X POST -H "Content-Type: application/json" -d '{"kind":"image","filter":"name==ubuntu10-migrated-disk"}' "https://cluster-1919.nutanix.ovh.us:9440/api/nutanix/v3/images/list" | python3 -m json.tool | grep -E '"uuid"'
+
+# Step 5: Upload qcow2 (replace IMAGE_UUID)
+curl -sk -u $NUTANIX_USERNAME:$NUTANIX_PASSWORD -X PUT -H "Content-Type: application/octet-stream" -T /tmp/ubuntu10-disk.qcow2 "https://cluster-1919.nutanix.ovh.us:9440/api/nutanix/v3/images/IMAGE_UUID/file"
+
+# Step 6: Create VM (replace IMAGE_UUID)
+curl -sk -u $NUTANIX_USERNAME:$NUTANIX_PASSWORD -X POST -H "Content-Type: application/json" -d '{"spec":{"name":"ubuntu10-ahv","description":"Migrated from VMware","resources":{"num_sockets":1,"num_vcpus_per_socket":1,"memory_size_mib":2048,"power_state":"ON","machine_type":"PC","boot_config":{"boot_type":"UEFI"},"disk_list":[{"data_source_reference":{"kind":"image","uuid":"IMAGE_UUID"},"device_properties":{"device_type":"DISK","disk_address":{"adapter_type":"SCSI","device_index":0}}}],"nic_list":[]},"cluster_reference":{"kind":"cluster","uuid":"00063ca3-b484-4dba-605d-66f6fc6cf210"}},"metadata":{"kind":"vm"}}' "https://cluster-1919.nutanix.ovh.us:9440/api/nutanix/v3/vms"
+ubuntuadmin@migration-host:~$
+ubuntuadmin@migration-host:~$ === Step 6: Create VM ===
+{"metadata": {"kind": "vm", "use_categories_mapping": false, "uuid": "6e6ad8bc-dd33-4b0f-b9be-d01e10d19de6", "spec_version": 0}, "api_version": "3.1", "spec": {"name": "ubuntu10-ahv", "description": "Migrated from VMware", "resources": {"num_sockets": 1, "num_vcpus_per_socket": 1, "memory_size_mib": 2048, "power_state": "ON", "machine_type": "PC", "disk_list": [{"device_properties": {"disk_address": {"adapter_type": "SCSI", "device_index": 0}, "device_type": "DISK"}, "data_source_reference": {"kind": "image", "uuid": "8d9c0f1b-d8e8-46c0-a742-e5f97cc6efdd"}}], "nic_list": [], "boot_config": {"boot_type": "UEFI"}}, "cluster_reference": {"kind": "cluster", "uuid": "00063ca3-b484-4dba-605d-66f6fc6cf210"}}, "status": {"state": "PENDING", "execution_context": {"task_uuid": "f511260c-98d7-48d9-8cbb-e7dcd3870f19"}}}^C
+ubuntuadmin@migration-host:~$ ^C
+ubuntuadmin@migration-host:~$  qemu-img info /tmp/ubuntu10-disk.qcow2
+image: /tmp/ubuntu10-disk.qcow2
+file format: qcow2
+virtual size: 50 GiB (53687091200 bytes)
+disk size: 6.05 GiB
+cluster_size: 65536
+Format specific information:
+    compat: 1.1
+    compression type: zlib
+    lazy refcounts: false
+    refcount bits: 16
+    corrupt: false
+    extended l2: false
+ubuntuadmin@migration-host:~$  sudo qemu-nbd --connect=/dev/nbd0 /tmp/ubuntu10-disk.qcow2
+[sudo] password for ubuntuadmin:
+qemu-nbd: Failed to set NBD socket
+ubuntuadmin@migration-host:~$ sudo qemu-nbd --disconnect /dev/nbd0
+/dev/nbd0 disconnected
+ubuntuadmin@migration-host:~$  sudo qemu-nbd --connect=/dev/nbd0 /tmp/ubuntu10-disk.qcow2
+ubuntuadmin@migration-host:~$  sudo fdisk -l /dev/nbd0
+The backup GPT table is corrupt, but the primary appears OK, so that will be used.
+Disk /dev/nbd0: 50 GiB, 53687091200 bytes, 104857600 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: gpt
+Disk identifier: E1001680-7C92-4543-A4BB-01FA3F9CE487
+
+Device        Start       End  Sectors  Size Type
+/dev/nbd0p1    2048   2203647  2201600    1G EFI System
+/dev/nbd0p2 2203648   6397951  4194304    2G Linux filesystem
+/dev/nbd0p3 6397952 104855551 98457600 46.9G Linux filesystem
+ubuntuadmin@migration-host:~$  sudo file -s /dev/nbd0p2
+/dev/nbd0p2: data
+ubuntuadmin@migration-host:~$  sudo file -s /dev/nbd0p3
+/dev/nbd0p3: data
+ubuntuadmin@migration-host:~$  sudo mount /dev/nbd0p1 /mnt/efi
+ubuntuadmin@migration-host:~$  ls -la /mnt/efi/EFI/BOOT/
+total 6872
+drwxr-xr-x 2 root root    4096 Mar 23 12:15 .
+drwxr-xr-x 4 root root    4096 Mar 22 16:54 ..
+-rwxr-xr-x 1 root root     108 Mar 23 12:15 BOOTX64.CSV
+-rwxr-xr-x 1 root root 3739648 Mar 23 14:50 BOOTX64.EFI
+-rwxr-xr-x 1 root root   88344 Mar 22 16:54 fbx64.efi
+-rwxr-xr-x 1 root root     121 Mar 23 12:15 grub.cfg
+-rwxr-xr-x 1 root root 2328456 Mar 23 12:15 grubx64.efi
+-rwxr-xr-x 1 root root  856280 Mar 23 12:15 mmx64.efi
+ubuntuadmin@migration-host:~$   sudo umount /mnt/efi
+ubuntuadmin@migration-host:~$ sudo qemu-nbd --disconnect /dev/nbd0
+/dev/nbd0 disconnected
+ubuntuadmin@migration-host:~$ qemu-io --image-opts "driver=iscsi,transport=tcp,portal=172.16.3.254:3260,target=iqn.2010-06.com.nutanix:datamigrate-ubuntu10-$(strings /tmp/datamigrate/ubuntu10/state.db | grep -o 'volume_group_id":"[^"]*' | head -1 | cut -d'"' -f3),lun=0,initiator-name=iqn.2026-01.com.datamigrate:initiator" -c "read -v 1128268800 256"
+43400400:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+43400410:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+43400420:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+43400430:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+43400440:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+43400450:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+43400460:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+43400470:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+43400480:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+43400490:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+434004a0:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+434004b0:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+434004c0:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+434004d0:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+434004e0:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+434004f0:  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+read 256/256 bytes at offset 1128268800
+256 bytes, 1 ops; 00.00 sec (452.062 KiB/sec and 1808.2463 ops/sec)

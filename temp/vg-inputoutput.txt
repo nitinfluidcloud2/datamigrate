@@ -1,0 +1,19 @@
+curl 'https://cluster-1919.nutanix.ovh.us:9440/api/volumes/v4.1/config/volume-groups' \
+  -H 'Accept: application/json' \
+  -H 'Accept-Language: en-GB,en-US;q=0.9,en;q=0.8' \
+  -H 'Cache-Control: no-cache' \
+  -H 'Connection: keep-alive' \
+  -H 'Content-Type: application/json' \
+  -b 'NTNX_SESSION_META=invalid; X-Nutanix-Client-Type=ui; NTNX_IAM_SESSION=CgZhZG1pbjIQ2MjAzQYaB01lcmN1cnkgACooYTE3YjUwZDcxMTI3NWFlOTNjNjk3Mjc1YWEyMzMyMzAyNWRiMDUyNA==|B6abzHJUMu/R9Muji4cFIcZdhUtIffJbV+CCoxAaQSY=; NTNX_MERCURY_IAM_SESSION=CgZhZG1pbjIQ2MjAzQYaB01lcmN1cnkgACooYTE3YjUwZDcxMTI3NWFlOTNjNjk3Mjc1YWEyMzMyMzAyNWRiMDUyNA==|B6abzHJUMu/R9Muji4cFIcZdhUtIffJbV+CCoxAaQSY=; NTNX_MERCURY_IAM_REFRESH_TOKEN=Chl5NWhtb2NzcnhpcHdkM2xsNzc3bTZxc3NsEhl0M3djYmdqY2Z5anB5aHducmF6Yno0bHZu' \
+  -H 'NTNX-Request-Id: 5a4e65ef-bccd-45b8-bc6e-8e129140c9fd' \
+  -H 'Origin: https://cluster-1919.nutanix.ovh.us:9440' \
+  -H 'Pragma: no-cache' \
+  -H 'Referer: https://cluster-1919.nutanix.ovh.us:9440/console/' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-origin' \
+  -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36' \
+  -H 'sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  --data-raw '{"name":"testVG","description":"test desc","shouldLoadBalanceVmAttachments":false,"sharingStatus":"NOT_SHARED","targetPrefix":"prefix","iscsiFeatures":{"$reserved":{"$fv":"v4.r1"},"$objectType":"volumes.v4.config.IscsiFeatures","$unknownFields":{}},"clusterReference":"00063ca3-b484-4dba-605d-66f6fc6cf210","usageType":"USER","isHidden":false,"$reserved":{"$fv":"v4.r1"},"$objectType":"volumes.v4.config.VolumeGroup","$unknownFields":{}}'
