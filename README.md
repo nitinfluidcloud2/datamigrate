@@ -4,63 +4,18 @@ VMware vSphere to Nutanix AHV VM migration tool using block-level replication wi
 
 ## How it works
 
-1. Takes a VMware snapshot and reads disk blocks
-2. Writes blocks to Nutanix — either directly via iSCSI Volume Groups or as qcow2 images
-3. Subsequent syncs transfer only changed blocks (CBT delta)
-4. Final cutover: last delta sync, shutdown source, create VM on Nutanix AHV, power on
+1. Takes a VMware snapshot and reads disk blocks via NFC export
+2. Converts to local raw disk image, then compressed qcow2
+3. Uploads qcow2 to Nutanix Image Store
+4. Subsequent syncs transfer only changed blocks (CBT delta) — patches the local raw file
+5. Final cutover: last delta sync, shutdown source, create VM on Nutanix AHV, power on
 
-The disk on Nutanix is always a complete, bootable disk after every sync. You can test-boot at any stage.
+The local raw file is always a complete, bootable disk after every sync. You can create a VM and test-boot at any stage.
 
-## Transport Modes
-
-The tool supports three transport modes that control how data moves from VMware to Nutanix:
-
-### `--transport iscsi` (production, Linux only)
-
-The fastest and most efficient mode. Reads raw flat disk bytes from the VMware datastore via HTTPS and writes them directly to a Nutanix Volume Group via iSCSI. **No local disk, no conversion, no temp files.** Incremental syncs write only CBT delta blocks.
+## How Data Flows
 
 ```
-VMware datastore ──HTTPS GET──▶ RawDiskReader (flat VMDK = raw sector bytes)
-                                      │
-                                64 MB chunks via pipeline (4 parallel workers)
-                                      │
-                                ISCSIWriter.WriteAt(offset, data)
-                                      │
-                                /dev/sdX ──iSCSI──▶ Nutanix Volume Group
-```
-
-**Requires:** Linux with `open-iscsi` (provides `iscsiadm`)
-
-**Where data lives:** Nutanix **Volume Group** — disks stay there across all syncs. At cutover, a VM is created directly from the VG disks (no copy needed).
-
-**Incremental syncs:** CBT identifies changed blocks → only those blocks are read from VMware and written to the same VG disk at their exact offsets. The VG disk is always a complete, bootable disk.
-
-### `--transport stream` (testing, Mac/Linux)
-
-Downloads the disk via NFC export (streamOptimized VMDK), converts to qcow2 locally with `qemu-img`, then uploads to the Nutanix image store. Works from any OS including macOS.
-
-```
-VMware snapshot ──NFC export──▶ streamOptimized VMDK (compressed, sparse-aware)
-                                      │
-                                Save to temp file (~10% of disk size)
-                                      │
-                                qemu-img convert -f vmdk -O qcow2
-                                      │
-                                Upload qcow2 ──HTTP PUT──▶ Nutanix Image Store
-```
-
-**Requires:** `qemu-img` installed, local disk space for VMDK + qcow2 temp files
-
-**Where data lives:** Nutanix **Image Store** — each sync creates a new image. You must manually create a VM from the image in Prism Central.
-
-**Incremental syncs:** Not supported — each run creates a full new image.
-
-### `--transport repository` (recommended, Mac/Linux)
-
-The most reliable mode. Reads the full disk via NFC export (correctly handles thin-provisioned disks and snapshot chains), converts to a local raw file, then to compressed qcow2, and uploads to Nutanix. Supports incremental syncs via CBT.
-
-```
-VMware snapshot ──NFC export──▶ streamOptimized VMDK
+VMware snapshot ──NFC export──▶ streamOptimized VMDK (compressed)
                                       │
                                 Save to temp file
                                       │
@@ -73,34 +28,20 @@ VMware snapshot ──NFC export──▶ streamOptimized VMDK
                                 createvm (from image UUID in state DB)
 ```
 
-**Requires:** `qemu-img` installed, local disk space for raw + qcow2 (~1.2x disk size)
+**T0 (Full Sync):** NFC exports the entire disk → saves as VMDK → converts to raw file (the "repository") → converts to qcow2 → uploads to Nutanix.
 
-**Where data lives:** Local raw file (`disk-0.raw`) is the repository — always a complete, bootable disk. Nutanix **Image Store** has the latest qcow2 upload.
+**T1..TN (Incremental):** CBT identifies changed blocks → NFC re-reads full disk → only changed blocks patched into the raw file → converts to qcow2 → re-uploads.
 
-**Incremental syncs:** CBT identifies changed blocks → NFC re-reads full disk → only changed blocks patched into raw file → convert → re-upload. (Future: VDDK for delta-only reads.)
+**Correctly handles:** Thin-provisioned disks, snapshot chains, UEFI and Legacy BIOS boot. Pure Go, no VDDK dependency.
 
-**VM creation:** Automatic via `createvm` command — reads image UUID from state DB.
-
-### `--transport image` (legacy fallback)
-
-Writes blocks to a local raw file, converts to qcow2, then uploads. Similar to stream but uses the block pipeline instead of NFC.
-
-**Requires:** `qemu-img`, local disk space equal to ~1.5x VM disk size
-
-### Comparison
-
-| | Repository (recommended) | iSCSI | Stream (testing) | Image (legacy) |
+**Tested on:**
+| OS | Boot | Disk | Snapshots | Result |
 |---|---|---|---|---|
-| **OS** | Any (Mac/Linux) | Linux only | Any (Mac/Linux) | Any |
-| **Read method** | NFC export (correct for thin disks) | Datastore HTTPS (broken for thin) | NFC export | NFC export |
-| **Write method** | Local raw file → qcow2 → upload | iSCSI WriteAt to Volume Group | HTTP PUT to Image Store | Local qcow2 → HTTP PUT |
-| **Local disk** | Raw + qcow2 (~1.2x disk) | None | VMDK + qcow2 temp files | Raw + qcow2 staging |
-| **Dependencies** | qemu-img | Pure Go iSCSI | qemu-img | qemu-img |
-| **Incremental** | Yes (CBT + NFC re-read) | Yes (CBT deltas) | No (full each time) | No |
-| **Thin disk safe** | ✅ Yes | ❌ No (data corruption) | ✅ Yes | ✅ Yes |
-| **VM creation** | `createvm` (auto from state) | `createvm --volume-group` | Manual from image | Manual from image |
+| Ubuntu 24.04 | UEFI | 50 GB thin | Yes | ✅ T0 + T1 + boot |
+| Windows | UEFI | 25 GB | - | ✅ T0 + T1 + boot |
+| Alpine Linux | UEFI | - | Many | ✅ T0 + boot |
 
-## Quick Start (Repository Transport)
+## Quick Start
 
 ```bash
 # 1. Build
@@ -123,14 +64,13 @@ scp bin/datamigrate-linux-amd64 user@migration-host:~/datamigrate
 
 # 7. Verify VM boots in Prism Central
 
-# 8. (Optional) Run incremental syncs before cutover
+# 8. (Optional) Run incremental syncs, then recreate VM with latest data
 ./datamigrate migrate sync --plan configs/<vm-name>-plan.yaml
+./datamigrate createvm --plan configs/<vm-name>-plan.yaml --boot-type UEFI --power-on
 
 # 9. Cleanup when done
 ./datamigrate cleanup --plan configs/<vm-name>-plan.yaml
 ```
-
-**Tested:** Ubuntu 24.04 (UEFI, 50 GB, thin-provisioned) and RHEL 6 (Legacy BIOS, 10 GB) — both boot on AHV.
 
 ## Migration Lifecycle
 
@@ -139,7 +79,7 @@ scp bin/datamigrate-linux-amd64 user@migration-host:~/datamigrate
 ```
 T0 (Full Sync)           T1..TN (Incremental)         Cutover
 ─────────────────        ─────────────────────         ────────────────────
-migrate start            migrate sync (repeat)         migrate cutover
+migrate start            migrate sync (repeat)         createvm --power-on
 
 ┌─────────────┐          ┌─────────────┐               ┌─────────────┐
 │ VMware VM   │          │ VMware VM   │               │ VMware VM   │
@@ -147,48 +87,39 @@ migrate start            migrate sync (repeat)         migrate cutover
 │             │          │             │               │             │
 │ Snapshot T0 │          │ Snapshot TN │               │ Final snap  │
 └──────┬──────┘          └──────┬──────┘               └──────┬──────┘
-       │ read all                │ read CBT delta              │ last delta
-       │ blocks                  │ blocks only                 │
+       │ NFC export              │ NFC + CBT delta             │ last delta
+       │ full disk               │ patch raw file              │
        ▼                         ▼                             ▼
 ┌─────────────┐          ┌─────────────┐               ┌─────────────┐
-│ Nutanix VG  │          │ Nutanix VG  │               │ Nutanix VM  │
-│ (full copy) │          │ (updated)   │               │ (powered on)│
-│             │          │             │               │ from VG     │
+│ Local raw   │          │ Local raw   │               │ Nutanix VM  │
+│ + qcow2     │          │ (patched)   │               │ (powered on)│
+│ + image     │          │ + new qcow2 │               │ from image  │
 └─────────────┘          └─────────────┘               └─────────────┘
 
 Source VM: RUNNING        Source VM: RUNNING             Source VM: OFF
-Downtime:  ZERO           Downtime:  ZERO                Downtime: 2-10 min
+Downtime:  ZERO           Downtime:  ZERO                Downtime: 5-15 min
 ```
 
-### Where does data live on Nutanix?
+### Where does data live?
 
-**iSCSI transport:**
-- **Volume Group** named `datamigrate-<vm-name>` with one disk per source VM disk
-- The VG persists across all syncs — T0 creates it, T1..TN update it in-place
-- At cutover, a VM is created and the VG disks become the VM's disks
-- You can **test-boot** at any point by creating a VM from the VG in Prism (clone the disk first so syncs can continue)
+**On migration host:**
+- `disk-0.raw` — local raw disk image (the repository), patched in-place each sync
+- `disk-0.qcow2` — compressed image for upload, regenerated each sync
+- Only one copy of each — no accumulation over T0..TN
 
-**Stream/Image transport:**
-- **Image Store** — each run creates a new image named `<vm-name>-disk-<key>-<datetime>`
-- You must manually create a VM from the image in Prism Central
-- No incremental capability — each run is a full upload
+**On Nutanix:**
+- **Image Store** — each sync uploads a new image named `<vm-name>-disk-<key>-<datetime>`
+- `createvm` reads the latest image UUID from state DB and creates a VM from it
 
 ### Testing a migration before cutover
 
-After T0 or any sync, you can verify the disk is bootable:
+After T0 or any sync, create a test VM:
 
-**iSCSI transport (Volume Group):**
-1. In Prism Central: **VMs → Create VM**
-2. Add disk: **Clone from Volume Group** → select `datamigrate-<vm-name>`
-3. Set boot type: **Legacy BIOS** (for older VMs like RHEL 6) or **UEFI** (for modern VMs)
-4. Power on and verify
-5. **Delete the test VM** before running the next `migrate sync` (or the VG disk will be locked)
+```bash
+./datamigrate createvm --plan configs/<vm-name>-plan.yaml --boot-type UEFI --power-on
+```
 
-**Stream transport (Image):**
-1. In Prism Central: **VMs → Create VM**
-2. Add disk: **Clone from Image** → select the latest `<vm-name>-disk-<key>-<datetime>` image
-3. Set boot type appropriately
-4. Power on and verify
+Delete the test VM from Prism before the next sync (old image stays, new one is created on next sync).
 
 ## Prerequisites
 
@@ -200,10 +131,8 @@ For best performance, run it from a machine with fast network to both VMware and
 
 ### Network Requirements
 
-**Repository transport (recommended):**
-
 ```
-  Migration Host (anywhere)
+  Migration Host (anywhere — laptop, cloud VM, datacenter VM)
   ┌──────────────┐
   │ datamigrate  │──── HTTPS (443) ────► vCenter API (discovery, snapshots, CBT)
   │              │
@@ -221,50 +150,24 @@ For best performance, run it from a machine with fast network to both VMware and
 
 **Port 902** is ESXi's standard NFC (Network File Copy) port — open by default on all ESXi hosts for vSphere operations (vMotion, NFC export, file transfers).
 
-**No longer needed with repository transport:**
-- ~~iSCSI Data Services IP (3260)~~ — no Volume Group writes
-- ~~CVM access~~ — no Stargate/iSCSI
-- ~~Anti-DDoS workarounds~~ — no repeated TCP connections
-
-**iSCSI transport (legacy, requires additional access):**
-
-| Destination | Port | Protocol | Purpose |
-|---|---|---|---|
-| vCenter | 443 | HTTPS | VM discovery, snapshots, CBT queries |
-| ESXi hosts | 443 | HTTPS | Datastore flat VMDK download |
-| Nutanix Data Services IP | 3260 | iSCSI | Volume Group block writes |
-| Prism Central | 9440 | HTTPS | VG management, VM creation |
-
-A small Linux VM works fine — 2 vCPUs, 4 GB RAM. The tool streams blocks through memory; it doesn't need much disk.
+No CVM access, no iSCSI ports, no special Nutanix infrastructure required.
 
 ### System requirements
 
-| Requirement | Repository (recommended) | iSCSI | Stream | Image |
-|---|---|---|---|---|
-| **OS** | Linux or macOS | Linux only | Linux or macOS | Linux or macOS |
-| **CPU** | 2+ vCPUs | 2+ vCPUs | 2+ vCPUs | 2+ vCPUs |
-| **RAM** | 512 MB per VM | 512 MB per VM | 512 MB per VM | 512 MB per VM |
-| **Disk** | Raw + qcow2 (~1.2x disk) | ~1 GB (binary + state DB) | VMDK + qcow2 (~0.5x disk) | Raw + qcow2 (~1.5x disk) |
-| **Dependencies** | qemu-img | none (pure Go) | qemu-img | qemu-img |
-| **Go** | 1.24+ (build only) | 1.24+ (build only) | 1.24+ (build only) | 1.24+ (build only) |
+| Requirement | |
+|---|---|
+| **OS** | Linux or macOS |
+| **CPU** | 2+ vCPUs |
+| **RAM** | 512 MB per VM |
+| **Disk** | ~1.2x VM disk size (raw + qcow2) |
+| **Dependencies** | `qemu-img` (`yum install qemu-img` or `brew install qemu`) |
+| **Go** | 1.24+ (build only) |
 
 ### Memory usage and performance
 
 **RAM is NOT a bottleneck.** The tool streams blocks through a small in-memory buffer — it does NOT load the entire disk into RAM.
 
-How the pipeline works:
-```
-VMware ESXi                    Memory buffer                    Nutanix
-┌──────────┐    read block    ┌────────────────┐  write block  ┌──────────┐
-│ Disk     │ ────────────────►│ Channel buffer │ ─────────────►│ Volume   │
-│ (100 GB) │                  │ (16 slots)     │   via iSCSI   │ Group    │
-│          │   1 block at     │ + 4 workers    │               │          │
-│          │   a time         │                │               │          │
-└──────────┘                  └────────────────┘               └──────────┘
-                               ↑
-                               Only 20 blocks in memory at any time
-                               20 × 1 MB = ~20 MB
-```
+The NFC stream is saved to disk and converted — not held in memory.
 
 **Memory per VM migration:**
 
@@ -286,62 +189,31 @@ For parallel migrations:
 
 **4 GB RAM is enough for 20+ parallel VM migrations.**
 
-### Why streaming is faster than disk-first
-
-You might think: "write to local disk first, then transfer to Nutanix — wouldn't that be faster?" **No — streaming is faster:**
-
-```
-STREAMING (what iSCSI transport does):
-  Read and write happen IN PARALLEL — while block N writes to Nutanix,
-  block N+1 is already being read from VMware.
-
-  VMware read:   ████████████████████████████   13 min
-  Nutanix write: ░████████████████████████████  13 min (starts 1 block later)
-                                          Total: ~13 min
-
-DISK-FIRST (write locally, then transfer):
-  Read everything to local disk FIRST, then read it back and send to Nutanix.
-
-  VMware read:    ████████████████████████████              13 min
-  Write to SSD:   ████████████████████████████               2 min
-  Read from SSD:                                ████████████ 2 min
-  Nutanix write:                                █████████████████████████████ 13 min
-                                                                       Total: ~30 min
-```
-
-Streaming overlaps read and write, disk-first does them sequentially. Streaming also avoids:
-- 2x local disk I/O (write + read back)
-- Needing enough disk space for the entire VM
-- SSD wear from temporary data
-
-The only scenario where disk-first wins is if the VMware-to-machine link is much faster than machine-to-Nutanix (e.g., reading from local datastore SSD but writing to Nutanix over a slow WAN link). But if you're running from a VM inside the same datacenter (recommended), both links are equally fast.
-
 ### Disk sizing
 
-**iSCSI transport (default):** Blocks stream directly to Nutanix — no local staging files. You only need space for the binary (~16 MB), BoltDB state file (~1 MB per VM), and logs. **~1 GB total is plenty**, even for 50+ parallel VMs.
-
-**Image transport:** Each VM being migrated needs local disk for a raw file + qcow2 file. Formula:
+Each VM being migrated needs local disk for a raw file + qcow2 file:
 
 ```
-Disk per VM  =  VM disk size (raw)  +  compressed qcow2 (~30-50% of raw)
-             ≈  1.5x the VM's disk size
+Disk per VM  =  VM disk size (raw, sparse)  +  compressed qcow2 (~10-30% of raw)
+             ≈  1.2x the VM's disk size
 ```
 
-| VMs in parallel | Avg VM disk | Disk needed (image transport) |
+| VMs | Avg VM disk | Disk needed |
 |---|---|---|
-| 1 VM | 100 GB | ~150 GB |
-| 1 VM | 500 GB | ~750 GB |
-| 3 VMs | 100 GB each | ~450 GB |
-| 5 VMs | 200 GB each | ~1.5 TB |
-| 10 VMs | 100 GB each | ~1.5 TB |
+| 1 VM | 50 GB | ~60 GB |
+| 1 VM | 100 GB | ~120 GB |
+| 1 VM | 500 GB | ~600 GB |
 
-**Recommendation:** Use iSCSI transport (default) to avoid disk requirements entirely. If you must use image transport, provision a data disk mounted at `/tmp/datamigrate` with enough space for all parallel VMs.
+Note: The raw file is sparse — actual disk usage depends on how much data the VM has. A 50 GB disk with 6 GB of data uses ~6 GB on disk (+ ~6 GB qcow2 = ~12 GB total).
 
 ```bash
-# Example: mount a 500 GB disk for image transport staging
-sudo mkfs.xfs /dev/sdb
-sudo mkdir -p /tmp/datamigrate
-sudo mount /dev/sdb /tmp/datamigrate
+# Example: mount a dedicated disk for migration staging
+sudo mkfs.ext4 /dev/sdb
+sudo mkdir -p /data
+sudo mount /dev/sdb /data
+# Then set staging directory in the plan YAML:
+# staging:
+#   directory: /data/datamigrate
 ```
 
 ### Nutanix prerequisites
@@ -350,33 +222,15 @@ The tool uses the Nutanix Prism Central v3 API. A few things must be configured 
 
 #### Required setup (one-time, by Nutanix admin)
 
-**1. iSCSI Data Services IP must be configured**
-
-The tool creates Volume Groups and connects to them via iSCSI. This requires a Data Services IP on the Nutanix cluster.
-
-```
-Prism Element → Cluster Details → iSCSI Data Services IP
-```
-
-If this is not set, the tool will fail with: `cluster has no data services IP configured`
-
-To configure:
-- Log in to **Prism Element** (not Prism Central)
-- Go to **Settings** (gear icon) → **Cluster Details**
-- Set **iSCSI Data Services IP** to a free IP on the storage network
-- This IP must be reachable from the machine running datamigrate (port 3260)
-
-**2. Prism Central API access**
+**1. Prism Central API access**
 
 The tool needs a user account on Prism Central with permissions to:
 
 | API Operation | Prism Central Permission |
 |---|---|
-| Create/delete Volume Groups | Storage Admin or Cluster Admin |
 | Create/upload Images | Image Admin or Cluster Admin |
 | Create/power on VMs | VM Admin or Cluster Admin |
-| List subnets/containers | Viewer (any role) |
-| List clusters | Viewer (any role) |
+| List subnets/clusters | Viewer (any role) |
 
 A user with **Cluster Admin** role covers everything. For least-privilege, create a service account with only the roles above.
 
@@ -422,24 +276,19 @@ datamigrate plan create --config config.yaml --vm web-server-01 \
 
 You do NOT need to pre-create these — the tool handles them:
 
-| Resource | Created when | Transport | Named | Cleaned up |
-|---|---|---|---|---|
-| **Volume Group** | `migrate start` (T0) | iSCSI | `datamigrate-<vm-name>` | `cleanup` or manually |
-| **VG Disks** | `migrate start` (T0) | iSCSI | One LUN per VM disk, sized to match | With the Volume Group |
-| **Image** | `migrate start` (T0) | stream/image | `<vm-name>-disk-<N>-<datetime>` | Manually via Prism |
-| **Target VM** | `cutover` | all | Same as source VM name | Manually if unwanted |
+| Resource | Created when | Named | Cleaned up |
+|---|---|---|---|
+| **Image** | `migrate start` / `migrate sync` | `<vm-name>-disk-<N>-<datetime>` | Manually via Prism |
+| **Target VM** | `createvm` | `<vm-name>-ahv` | Manually if unwanted |
 
 #### Nutanix checklist
 
 ```
-[ ] iSCSI Data Services IP configured on the cluster
 [ ] Prism Central user account with Cluster Admin (or equivalent) role
 [ ] Cluster UUID noted
 [ ] Target subnet UUID(s) noted for network mapping
-[ ] Storage container UUID noted for storage mapping (optional)
 [ ] Port 9440 accessible from datamigrate machine to Prism Central
-[ ] Port 3260 accessible from datamigrate machine to Data Services IP (iSCSI transport)
-[ ] Enough storage capacity on Nutanix for the migrated VM disks
+[ ] Enough storage capacity on Nutanix for the migrated VM images
 ```
 
 ### VMware prerequisites
