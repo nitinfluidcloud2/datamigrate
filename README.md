@@ -194,37 +194,59 @@ After T0 or any sync, you can verify the disk is bootable:
 
 ### Where to run
 
-The tool can run from **any machine** with network access to both VMware and Nutanix. For best performance, run it from a **Linux VM inside the VMware datacenter** — this keeps the heavy block transfer on the fast datacenter network (10/25 GbE) instead of going over WAN/VPN.
+The tool can run from **any machine** with network access to both VMware and Nutanix — your laptop, a cloud VM, or a datacenter VM. No CVM access or special Nutanix infrastructure needed.
+
+For best performance, run it from a machine with fast network to both VMware and Nutanix (e.g., a VM in the same datacenter).
+
+### Network Requirements
+
+**Repository transport (recommended):**
 
 ```
-Recommended setup:
-
-  ┌─────────────────────────── VMware Datacenter ───────────────────────────┐
-  │                                                                         │
-  │  ┌──────────────┐     fast (10/25 GbE)      ┌───────────────────────┐  │
-  │  │ Linux VM     │ ─────────────────────────► │ vCenter API (443)    │  │
-  │  │ running      │                            └───────────────────────┘  │
-  │  │ datamigrate  │                                                       │
-  │  │              │     fast (10/25 GbE)      ┌───────────────────────┐  │
-  │  │              │ ─────────────────────────► │ Nutanix Prism (9440) │  │
-  │  │              │                            │ iSCSI Data Svc (3260)│  │
-  │  └──────────────┘                            └───────────────────────┘  │
-  │                                                                         │
-  └─────────────────────────────────────────────────────────────────────────┘
+  Migration Host (anywhere)
+  ┌──────────────┐
+  │ datamigrate  │──── HTTPS (443) ────► vCenter API (discovery, snapshots, CBT)
+  │              │
+  │              │──── TCP (902) ───────► ESXi hosts (NFC disk export)
+  │              │
+  │              │──── HTTPS (9440) ────► Nutanix Prism Central (image upload, VM creation)
+  └──────────────┘
 ```
 
-A small Linux VM works fine — 2 vCPUs, 4 GB RAM. The tool streams blocks through memory; it doesn't need much disk (zero disk for iSCSI transport).
+| Destination | Port | Protocol | Purpose |
+|---|---|---|---|
+| vCenter | 443 | HTTPS | VM discovery, snapshots, CBT queries |
+| ESXi hosts | 902 | TCP | NFC data transfer (disk export) |
+| Prism Central | 9440 | HTTPS | Image upload, VM creation |
+
+**Port 902** is ESXi's standard NFC (Network File Copy) port — open by default on all ESXi hosts for vSphere operations (vMotion, NFC export, file transfers).
+
+**No longer needed with repository transport:**
+- ~~iSCSI Data Services IP (3260)~~ — no Volume Group writes
+- ~~CVM access~~ — no Stargate/iSCSI
+- ~~Anti-DDoS workarounds~~ — no repeated TCP connections
+
+**iSCSI transport (legacy, requires additional access):**
+
+| Destination | Port | Protocol | Purpose |
+|---|---|---|---|
+| vCenter | 443 | HTTPS | VM discovery, snapshots, CBT queries |
+| ESXi hosts | 443 | HTTPS | Datastore flat VMDK download |
+| Nutanix Data Services IP | 3260 | iSCSI | Volume Group block writes |
+| Prism Central | 9440 | HTTPS | VG management, VM creation |
+
+A small Linux VM works fine — 2 vCPUs, 4 GB RAM. The tool streams blocks through memory; it doesn't need much disk.
 
 ### System requirements
 
-| Requirement | iSCSI transport | Stream transport | Image transport |
-|---|---|---|---|
-| **OS** | Linux (RHEL/CentOS/Ubuntu) | Linux or macOS | Linux or macOS |
-| **CPU** | 2+ vCPUs | 2+ vCPUs | 2+ vCPUs |
-| **RAM** | 512 MB per VM | 512 MB per VM | 512 MB per VM |
-| **Disk** | ~1 GB (binary + state DB) | VMDK + qcow2 temp (~0.5x disk) | Raw + qcow2 (~1.5x disk) |
-| **Dependencies** | open-iscsi | qemu-img | qemu-img |
-| **Go** | 1.24+ (build only) | 1.24+ (build only) | 1.24+ (build only) |
+| Requirement | Repository (recommended) | iSCSI | Stream | Image |
+|---|---|---|---|---|
+| **OS** | Linux or macOS | Linux only | Linux or macOS | Linux or macOS |
+| **CPU** | 2+ vCPUs | 2+ vCPUs | 2+ vCPUs | 2+ vCPUs |
+| **RAM** | 512 MB per VM | 512 MB per VM | 512 MB per VM | 512 MB per VM |
+| **Disk** | Raw + qcow2 (~1.2x disk) | ~1 GB (binary + state DB) | VMDK + qcow2 (~0.5x disk) | Raw + qcow2 (~1.5x disk) |
+| **Dependencies** | qemu-img | none (pure Go) | qemu-img | qemu-img |
+| **Go** | 1.24+ (build only) | 1.24+ (build only) | 1.24+ (build only) | 1.24+ (build only) |
 
 ### Memory usage and performance
 
