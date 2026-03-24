@@ -473,6 +473,20 @@ Go libraries available for VMDK parsing:
 This gives us a fully independent, VDDK-free migration tool as the default, with
 VDDK as an optional performance boost for users willing to accept the licensing.
 
+### Implementation Phases
+
+| Phase | Scope | Transport | Dependencies |
+|---|---|---|---|
+| **Phase 1 (implement now)** | T0 full sync: NFC → parse VMDK → raw file → qcow2 → upload → bootable VM | Pure Go | qemu-img only |
+| **Phase 2 (implement now)** | T1 incremental: CBT → NFC re-read → filter changed blocks → patch raw → upload | Pure Go | qemu-img only |
+| **Phase 3 (future)** | Optional VDDK transport: delta-only T1 reads via nbdkit+VDDK for large VMs | VDDK (BYOVDDK) | nbdkit + VDDK + qemu-img |
+
+Phase 3 adds `--transport vddk` as a user option for environments where T1 network
+cost matters (e.g., 300 GB disk, frequent syncs). Users choose between `--transport repository`
+(pure Go, VDDK-free, default) and `--transport vddk` (faster T1, requires VDDK).
+VDDK licensing review (Broadcom EULA at https://docs.broadcom.com/doc/end-user-agreement-english)
+should be completed before Phase 3 implementation.
+
 ## Risks
 
 | Risk | Likelihood | Mitigation |
