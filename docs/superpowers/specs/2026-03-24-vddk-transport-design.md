@@ -385,18 +385,121 @@ Network transfer = delta only. This is the key advantage over stream transport.
 - Verification: mount raw file, check `file -s`, compare with source
 - Preflight check: `nc -zv <esxi-host> 902` to verify NBDSSL port access
 
+## Alternative: Pure Go VMDK Parser (VDDK-Free)
+
+### VDDK Licensing Concern
+
+VDDK requires Broadcom's proprietary `libvixDiskLib.so` regardless of integration method:
+
+| Approach | Open Source Part | Broadcom Part (required) |
+|---|---|---|
+| nbdkit + VDDK plugin | nbdkit (BSD) | `libvixDiskLib.so` from Broadcom |
+| cgo + VDDK | Go wrapper code | `libvixDiskLib.so` from Broadcom |
+
+Post-Broadcom acquisition (2024+), VDDK licensing is increasingly restrictive:
+- Cannot redistribute VDDK libraries without partner agreement
+- Commercial products need a separate distribution agreement
+- Developer portal access becoming harder to obtain
+- All open-source tools (migratekit, vjailbreak, kubevirt) use BYOVDDK — none bundle it
+
+### VDDK-Free Alternative: Parse StreamOptimized VMDK in Pure Go
+
+Our NFC `ExportSnapshot` already returns correct, complete data for thin disks and
+snapshot chains. The stream is in streamOptimized VMDK format (compressed grains
+with grain tables). We can parse this in pure Go.
+
+**How it works:**
+
+```
+T0:  NFC ExportSnapshot → streamOptimized VMDK stream
+         → Parse grain tables (pure Go)
+         → Decompress grains (zlib)
+         → WriteAt(data, virtualOffset) to disk-0.raw
+         → qemu-img convert → qcow2 → upload → create VM
+
+T1:  CBT query (govmomi SOAP API) → changed extents list
+     NFC ExportSnapshot → streamOptimized VMDK stream (full disk)
+         → Parse grains, KEEP only those in changed extents
+         → WriteAt(changedData, offset) to disk-0.raw
+         → qemu-img convert → qcow2 → upload → recreate VM
+```
+
+Go libraries available for VMDK parsing:
+- `github.com/Velocidex/go-vmdk` — reads VMDK files locally
+- `github.com/masahiro331/go-vmdk-parser` — parses VMDK format
+- `github.com/libyal/libvmdk` — C reference (format documentation)
+
+### Comparison: All Approaches (50 GB disk, 100 MB changed at T1)
+
+| | Stream (today) | VDDK (Broadcom needed) | Pure Go VMDK Parser |
+|---|---|---|---|
+| **T0 network** | ~6 GB (compressed) | ~50 GB (raw) | ~6 GB (compressed) |
+| **T0 disk write** | ~56 GB (vmdk+qcow2) | 50 GB (raw) | 50 GB (raw) + 6 GB (qcow2) |
+| **T0 correctness** | ✅ | ✅ | ✅ |
+| **Can detect T1 delta?** | ❌ No CBT | ✅ CBT + delta only | ✅ CBT (govmomi API) |
+| **T1 network** | ~6 GB (full re-download) | **100 MB** (delta only) | ~6 GB (full re-download) |
+| **T1 disk write** | ~56 GB (full rewrite) | **100 MB** (delta only) | **100 MB** (patch changed blocks) |
+| **T1 time** | ~10-15 min | **~30 sec** | ~5-8 min |
+| **Cutover downtime (50 GB)** | 15-20 min | 2-5 min | 5-10 min |
+| **Cutover downtime (300 GB)** | 60-90 min | 5-10 min | 15-25 min |
+| **Broadcom dependency** | None | **Yes (VDDK license)** | None |
+| **Thin disk safe?** | ✅ | ✅ | ✅ |
+| **Works on Mac?** | ✅ | ❌ Linux only | ✅ |
+| **Legal risk** | Zero | Broadcom can restrict | Zero |
+| **External dependencies** | qemu-img | nbdkit + VDDK + qemu-img | qemu-img |
+| **Complexity** | Low (exists) | Medium (nbdkit/cgo) | Medium (VMDK parser) |
+
+### Trade-off Summary
+
+| | VDDK | Pure Go |
+|---|---|---|
+| **T1 network cost** | Only delta (100 MB) | Full disk compressed (6 GB) |
+| **T1 disk I/O** | Only delta (100 MB) | Only delta (100 MB) — same! |
+| **Legal risk** | Broadcom dependency | Zero — our code |
+| **Long-term viability** | Dependent on Broadcom | Independent, fully portable |
+| **Extra T1 time (50 GB)** | Baseline | +1 min (6 GB on 1 Gbps) |
+| **Extra T1 time (300 GB)** | Baseline | +5-10 min (30 GB on 1 Gbps) |
+
+### Recommended Strategy
+
+1. **Implement Pure Go VMDK Parser first** (VDDK-free, no licensing risk)
+   - Milestone 1: T0 full sync via NFC → parse VMDK → raw file → qcow2 → bootable VM
+   - Milestone 2: T1 incremental via CBT + NFC re-read + filter → patch raw → upload
+2. **Add VDDK as optional optimization later** (for users who want delta-only T1 reads)
+   - BYOVDDK pattern: user supplies VDDK libraries
+   - Provides delta-only network transfer at T1 (100 MB vs 6 GB)
+   - Not required — pure Go path works without it
+
+This gives us a fully independent, VDDK-free migration tool as the default, with
+VDDK as an optional performance boost for users willing to accept the licensing.
+
 ## Risks
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
-| VDDK license restrictions | Medium | Document Broadcom licensing; VDDK is free for backup use |
-| nbdkit not available on RHEL7 | Low | Install from EPEL or build from source |
-| NBD protocol implementation bugs | Low | Hand-rolled client is ~200 lines, simple to debug |
-| VDDK version incompatibility | Low | Test with VDDK 7.0 and 8.0; document tested version matrix |
+| VMDK parser bugs (grain table edge cases) | Medium | Use existing Go libraries; extensive testing with thin/thick/UEFI/Legacy VMs |
 | Disk space on migration host | Medium | Check before T0; warn if < 2x disk size; delete raw after qcow2 conversion |
-| ESXi port 902 blocked | Medium | Preflight connectivity check; document NBDSSL requires direct ESXi access on port 902 |
-| nbdkit-vddk-plugin ABI mismatch | Medium | Pin tested nbdkit + VDDK versions; build nbdkit from source if needed |
+| NFC re-read too slow for T1 (large disks) | Medium | Acceptable for most workloads; add VDDK as optional optimization for large VMs |
+| StreamOptimized VMDK format changes | Low | Format is stable since VMDK spec v3; documented by libvmdk |
+| qemu-img not available | Low | Check at startup; provide install instructions |
+| VDDK license restrictions (if VDDK optional path used) | Medium | BYOVDDK pattern; document Broadcom licensing; VDDK is optional, not required |
 
 ## Package Location
 
-New code goes in `internal/vddk/` (not `internal/transport/vddk/`). The existing `internal/transport/` package defines transport mode enums and stubs — it doesn't contain reader/writer implementations. The readers live in `internal/vmware/` and writers in `internal/blockio/`. Following this pattern, `internal/vddk/` is the right home for VDDK-specific code (nbdkit management + NBD reader).
+New code goes in `internal/repository/` for the pure Go VMDK parser and repository management.
+Optional VDDK code goes in `internal/vddk/` if/when added as an optimization.
+
+```
+internal/
+  repository/
+    reader.go         # StreamOptimized VMDK parser → raw blocks
+    writer.go         # RawFileWriter (WriteAt to disk-0.raw)
+    convert.go        # qemu-img wrapper (raw → qcow2)
+    metadata.go       # Sync state, changeIds, history
+    t0.go             # T0 full sync orchestration
+    incremental.go    # T1+ CBT + NFC re-read + patch
+  vddk/               # Optional, future
+    nbdkit.go         # nbdkit process management
+    reader.go         # NBD client (VDDKReader)
+    install.go        # VDDK auto-installer
+```
