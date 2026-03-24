@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
 
 	"github.com/nitinmore/datamigrate/internal/blockio"
 	"github.com/nitinmore/datamigrate/internal/nutanix"
+	"github.com/nitinmore/datamigrate/internal/repository"
 	"github.com/nitinmore/datamigrate/internal/state"
 	"github.com/nitinmore/datamigrate/internal/util"
 	"github.com/nitinmore/datamigrate/internal/vmware"
@@ -332,6 +334,52 @@ func (o *Orchestrator) FullSync(ctx context.Context) error {
 				return fmt.Errorf("creating qcow2 writer: %w", err)
 			}
 			writer = w
+
+		case state.TransportRepository:
+			// Repository transport: NFC → parse VMDK → raw file → qcow2 → upload
+			nfcReader := reader.(*vmware.DiskReader)
+
+			stagingDir := o.plan.Staging.Directory
+			if stagingDir == "" {
+				stagingDir = "/tmp/datamigrate"
+			}
+			diskDir := filepath.Join(stagingDir, o.plan.Name)
+
+			qcow2Path, qcow2Size, err := repository.RunT0(ctx, nfcReader.StreamReader(), repository.T0Config{
+				StagingDir: diskDir,
+				DiskKey:    disk.Key,
+				Capacity:   disk.CapacityB,
+			})
+			nfcReader.Close()
+			if err != nil {
+				o.SetError(ms, err)
+				return fmt.Errorf("repository T0: %w", err)
+			}
+
+			// Upload qcow2 to Nutanix
+			imageName := fmt.Sprintf("%s-disk-%d-%s", o.plan.VMName, disk.Key, time.Now().Format("20060102-150405"))
+			imageUUID, err := o.nxClient.CreateImage(ctx, imageName, qcow2Size)
+			if err != nil {
+				o.SetError(ms, err)
+				return fmt.Errorf("creating image: %w", err)
+			}
+			if err := o.nxClient.UploadImage(ctx, imageUUID, qcow2Path); err != nil {
+				o.SetError(ms, err)
+				return fmt.Errorf("uploading qcow2: %w", err)
+			}
+
+			disk.ImageUUID = imageUUID
+			disk.LocalPath = strings.TrimSuffix(qcow2Path, ".qcow2") + ".raw"
+			disk.ChangeID = changeID
+			disk.BytesCopied = disk.CapacityB
+			disk.LastSyncedAt = time.Now()
+
+			log.Info().Str("image_uuid", imageUUID).Str("qcow2", qcow2Path).Msg("repository T0 complete")
+
+			if err := o.store.SaveMigration(ms); err != nil {
+				return fmt.Errorf("saving disk state: %w", err)
+			}
+			continue // skip the pipeline path below
 
 		default:
 			reader.Close()
