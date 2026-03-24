@@ -185,6 +185,89 @@ func InstallVDDK() error         // download + extract to /usr/lib/vmware-vix-di
 - Configurable via `VDDK_DOWNLOAD_URL` env var or plan YAML `vddk_url` field
 - Fallback: print manual install instructions and exit
 
+## External Dependencies
+
+### Required on Migration Host
+
+| Dependency | Version | Purpose | Size | Install Method |
+|---|---|---|---|---|
+| **nbdkit** | >= 1.30 | NBD server that hosts VDDK plugin | ~2 MB | `yum install nbdkit` (RHEL/CentOS) |
+| **nbdkit-vddk-plugin** | matches nbdkit | Plugin that connects nbdkit to VDDK | ~100 KB | `yum install nbdkit-vddk-plugin` |
+| **VDDK (VMware Virtual Disk Development Kit)** | 7.0.3 or 8.0.3 | C libraries for reading VMware virtual disks | ~124 MB | Download from Broadcom |
+| **qemu-img** | >= 2.0 | Converts raw → qcow2 for Nutanix upload | ~5 MB | `yum install qemu-img` |
+
+### How to Install
+
+**Option A: Auto-install (default)**
+
+datamigrate auto-detects and installs missing dependencies on first run:
+
+```
+$ ./datamigrate migrate start --plan configs/ubuntu10-plan.yaml --transport vddk
+
+Checking dependencies...
+  nbdkit:              not found → installing via yum...          OK
+  nbdkit-vddk-plugin:  not found → installing via yum...          OK
+  VDDK libs:           not found → downloading VDDK 8.0.3...      OK (124 MB)
+  qemu-img:            found (/usr/bin/qemu-img 2.12.0)           OK
+
+All dependencies ready.
+```
+
+Auto-install requires root/sudo on the migration host.
+
+**Option B: Manual install**
+
+```bash
+# 1. Install nbdkit + plugin
+sudo yum install -y epel-release
+sudo yum install -y nbdkit nbdkit-vddk-plugin qemu-img
+
+# 2. Download VDDK from Broadcom developer portal
+#    URL: https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0
+#    Requires free Broadcom account
+#    Download: VMware-vix-disklib-8.0.3-XXXXXXX.x86_64.tar.gz
+
+# 3. Extract VDDK
+sudo tar xzf VMware-vix-disklib-*.tar.gz -C /usr/lib/
+sudo ln -sf /usr/lib/vmware-vix-disklib-distrib /usr/lib/vmware-vix-disklib
+
+# 4. Set library path
+echo '/usr/lib/vmware-vix-disklib/lib64' | sudo tee /etc/ld.so.conf.d/vddk.conf
+sudo ldconfig
+
+# 5. Verify
+nbdkit --dump-plugin vddk
+# Should print: vddk_default_libdir=/usr/lib/vmware-vix-disklib
+```
+
+**Option C: Environment variables (custom paths)**
+
+```bash
+export VDDK_LIBDIR=/opt/custom/vmware-vix-disklib    # custom VDDK location
+export VDDK_DOWNLOAD_URL=https://internal-mirror/vddk-8.0.3.tar.gz  # internal mirror
+```
+
+Or in plan YAML:
+```yaml
+vddk:
+  libdir: /opt/custom/vmware-vix-disklib
+  download_url: https://internal-mirror/vddk-8.0.3.tar.gz
+```
+
+### VDDK Licensing
+
+VDDK is free for backup/migration use. It requires accepting the Broadcom EULA. The auto-installer prompts the user to accept before downloading. For automated/CI environments, set `VDDK_ACCEPT_LICENSE=yes` to skip the prompt.
+
+### Platform Support
+
+| Platform | nbdkit | VDDK | Status |
+|---|---|---|---|
+| RHEL 7/8/9 | yum/dnf | x86_64 Linux only | Supported |
+| Ubuntu 20.04+ | apt install nbdkit | x86_64 Linux only | Supported |
+| macOS | Not available | Not available | Use stream transport instead |
+| Docker | Include in Dockerfile | Bundle in image | Supported (Linux container) |
+
 ### 5. Verification + Upload (reuse existing code)
 
 After the raw file is written:
