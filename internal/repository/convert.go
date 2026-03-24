@@ -34,6 +34,22 @@ func ConvertRawToQcow2(rawPath, qcow2Path string) error {
 	return nil
 }
 
+// ConvertVMDKToRaw converts a streamOptimized VMDK to raw format using qemu-img.
+func ConvertVMDKToRaw(vmdkPath, rawPath string) error {
+	log.Info().Str("vmdk", vmdkPath).Str("raw", rawPath).Msg("converting VMDK → raw")
+	cmd := exec.Command("qemu-img", "convert", "-f", "vmdk", "-O", "raw", vmdkPath, rawPath)
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("qemu-img convert vmdk→raw: %w", err)
+	}
+	stat, err := os.Stat(rawPath)
+	if err != nil {
+		return fmt.Errorf("stating raw: %w", err)
+	}
+	log.Info().Str("raw", rawPath).Int64("size_mb", stat.Size()/(1024*1024)).Msg("VMDK → raw conversion complete")
+	return nil
+}
+
 // VerifyRawFile runs basic sanity checks on the raw disk image.
 func VerifyRawFile(rawPath string) error {
 	stat, err := os.Stat(rawPath)

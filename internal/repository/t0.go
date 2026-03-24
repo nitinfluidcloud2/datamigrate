@@ -39,7 +39,7 @@ func RunT0(ctx context.Context, nfcStream io.Reader, cfg T0Config) (qcow2Path st
 	// Step 2: Save NFC stream to temp VMDK file with progress logging
 	log.Info().Str("vmdk_path", vmdkPath).Msg("saving NFC VMDK stream to file")
 
-	written, err := saveStreamToFile(ctx, nfcStream, vmdkPath)
+	written, err := saveStreamToFile(ctx, nfcStream, vmdkPath, cfg.Capacity)
 	if err != nil {
 		return "", 0, fmt.Errorf("saving NFC stream: %w", err)
 	}
@@ -48,13 +48,20 @@ func RunT0(ctx context.Context, nfcStream io.Reader, cfg T0Config) (qcow2Path st
 		Str("vmdk_path", vmdkPath).
 		Msg("VMDK stream saved")
 
-	// Step 3: Parse VMDK -> raw file
-	log.Info().Str("vmdk", vmdkPath).Str("raw", rawPath).Msg("parsing VMDK to raw")
-	rawSize, err := ParseVMDKToRaw(vmdkPath, rawPath, cfg.Capacity)
-	if err != nil {
-		return "", 0, fmt.Errorf("parsing VMDK to raw: %w", err)
+	// Step 3: Convert VMDK -> raw using qemu-img (handles streamOptimized format correctly)
+	log.Info().Str("vmdk", vmdkPath).Str("raw", rawPath).Msg("converting VMDK to raw via qemu-img")
+	start := time.Now()
+	if err := ConvertVMDKToRaw(vmdkPath, rawPath); err != nil {
+		return "", 0, fmt.Errorf("converting VMDK to raw: %w", err)
 	}
-	log.Info().Int64("raw_size_mb", rawSize/(1024*1024)).Msg("VMDK parsed to raw")
+	rawStat, err := os.Stat(rawPath)
+	if err != nil {
+		return "", 0, fmt.Errorf("stating raw file: %w", err)
+	}
+	log.Info().
+		Int64("raw_size_mb", rawStat.Size()/(1024*1024)).
+		Str("elapsed", time.Since(start).Truncate(time.Second).String()).
+		Msg("VMDK → raw conversion complete")
 
 	// Step 4: Verify raw file
 	if err := VerifyRawFile(rawPath); err != nil {
@@ -155,7 +162,7 @@ func ParseVMDKToRaw(vmdkPath, rawPath string, capacity int64) (int64, error) {
 }
 
 // saveStreamToFile copies an io.Reader to a file, logging progress every 10 seconds.
-func saveStreamToFile(ctx context.Context, r io.Reader, path string) (int64, error) {
+func saveStreamToFile(ctx context.Context, r io.Reader, path string, totalSize int64) (int64, error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return 0, err
@@ -190,7 +197,16 @@ func saveStreamToFile(ctx context.Context, r io.Reader, path string) (int64, err
 		}
 
 		if time.Since(lastLog) >= 10*time.Second {
-			log.Info().Int64("bytes_mb", total/(1024*1024)).Msg("saving NFC stream progress")
+			pct := float64(0)
+			if totalSize > 0 {
+				pct = float64(total) / float64(totalSize) * 100
+			}
+			log.Info().
+				Int64("bytes_mb", total/(1024*1024)).
+				Int64("total_mb", totalSize/(1024*1024)).
+				Float64("pct", pct).
+				Msg("saving NFC stream progress")
+			fmt.Printf("\r  NFC download: %.1f%% (%d / %d MB)", pct, total/(1024*1024), totalSize/(1024*1024))
 			lastLog = time.Now()
 		}
 	}

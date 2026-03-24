@@ -61,6 +61,8 @@ func (o *Orchestrator) Initialize(ctx context.Context) (*state.MigrationState, e
 		transport = state.TransportStream
 	case "image":
 		transport = state.TransportImage
+	case "repository":
+		transport = state.TransportRepository
 	default:
 		transport = state.TransportStream // default: works from any OS
 	}

@@ -378,6 +378,46 @@ The same nbdkit+VDDK infrastructure supports T1 with minimal additions:
 
 Network transfer = delta only. This is the key advantage over stream transport.
 
+## Progress Reporting Standard
+
+All long-running data transfer operations MUST show percentage progress. This is a
+project-wide standard — applies to NFC download, VMDK parsing, image upload, and
+any future transfer operations.
+
+**Required fields in every progress update:**
+
+| Field | Description | Example |
+|---|---|---|
+| `pct` | Percentage complete (1 decimal) | `45.2` |
+| `bytes_mb` | Current bytes transferred (MB) | `23120` |
+| `total_mb` | Total expected bytes (MB) | `51200` |
+
+**Terminal output (in-place update):**
+```
+\r  NFC download: 45.2% (23120 / 51200 MB)
+\r  VMDK parse: 67.3% (34500 / 51200 MB)
+\r  Image upload: 82.1% (4920 / 5990 MB)
+```
+
+**Structured log:**
+```go
+log.Info().
+    Float64("pct", pct).
+    Int64("bytes_mb", current/(1024*1024)).
+    Int64("total_mb", total/(1024*1024)).
+    Msg("NFC download progress")
+```
+
+**Implementation pattern:**
+```go
+if time.Since(lastLog) >= 10*time.Second {
+    pct := float64(current) / float64(total) * 100
+    log.Info().Float64("pct", pct).Int64("bytes_mb", current/(1024*1024)).Int64("total_mb", total/(1024*1024)).Msg("progress")
+    fmt.Printf("\r  Operation: %.1f%% (%d / %d MB)", pct, current/(1024*1024), total/(1024*1024))
+    lastLog = time.Now()
+}
+```
+
 ## Testing
 
 - Unit tests: mock NBD server for VDDKReader

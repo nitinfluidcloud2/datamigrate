@@ -75,12 +75,20 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		fmt.Println("Removing VMware snapshots... SKIPPED (no tracked snapshots in state)")
 	}
 
-	// Clean up local staging files
+	// Clean up local staging files (includes VMDK, raw, qcow2 from repository transport)
 	planDir := filepath.Join(stagingDir, plan.Name)
 	fmt.Printf("Removing staging files in %s... ", planDir)
 	if err := os.RemoveAll(planDir); err != nil {
 		fmt.Printf("FAILED: %v\n", err)
 	} else {
+		fmt.Println("OK")
+	}
+
+	// Also clean the parent staging dir if it only contained this plan
+	entries, err := os.ReadDir(stagingDir)
+	if err == nil && len(entries) == 0 {
+		fmt.Printf("Removing empty staging dir %s... ", stagingDir)
+		os.Remove(stagingDir)
 		fmt.Println("OK")
 	}
 

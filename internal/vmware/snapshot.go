@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/vmware/govmomi/object"
@@ -159,7 +160,16 @@ func (c *Client) RemoveSnapshotByMoRef(ctx context.Context, morefValue string) e
 	}
 
 	task := object.NewTask(c.vimClient, res.Returnval)
-	if err := task.Wait(ctx); err != nil {
+
+	// Use a timeout context to avoid hanging forever on slow snapshot removal
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	if err := task.Wait(timeoutCtx); err != nil {
+		if timeoutCtx.Err() != nil {
+			log.Warn().Str("moref", morefValue).Msg("snapshot removal timed out after 2 minutes, continuing")
+			return nil
+		}
 		return fmt.Errorf("waiting for snapshot removal %s: %w", morefValue, err)
 	}
 
