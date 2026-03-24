@@ -32,6 +32,10 @@ const (
 	// TransportImage stages to local qcow2 file, then uploads to Nutanix via API.
 	// Requires local disk space equal to the VM disk size.
 	TransportImage TransportMode = "image"
+
+	// TransportRepository reads via NFC, stores locally as raw file, uploads as qcow2.
+	// Correct for thin-provisioned VMDKs. Pure Go, no VDDK dependency.
+	TransportRepository TransportMode = "repository"
 )
 
 // SnapshotRef tracks a VMware snapshot we created.

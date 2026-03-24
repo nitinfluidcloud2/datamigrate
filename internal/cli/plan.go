@@ -45,7 +45,7 @@ func init() {
 	planCreateCmd.Flags().StringSliceVar(&planNetworkMaps, "network-map", nil, "Network mappings: subnet-uuid or source-network:subnet-uuid")
 	planCreateCmd.Flags().StringSliceVar(&planStorageMaps, "storage-map", nil, "Storage mappings (source-datastore:target-container-uuid) — optional, for future use")
 	planCreateCmd.Flags().StringVar(&planOutputFile, "output", "", "Output plan file (default: <vm-name>-plan.yaml)")
-	planCreateCmd.Flags().StringVar(&planTransport, "transport", "stream", "Transport mode: 'iscsi' (direct VG writes, Linux only), 'stream' (gzip API upload, any OS), 'image' (local qcow2 staging)")
+	planCreateCmd.Flags().StringVar(&planTransport, "transport", "stream", "Transport mode: 'iscsi' (direct VG writes, Linux only), 'stream' (gzip API upload, any OS), 'image' (local qcow2 staging), 'repository' (NFC + local storage + qcow2 upload)")
 
 	planCreateCmd.MarkFlagRequired("vm")
 
