@@ -21,6 +21,55 @@ suitable for random-access patching.
 The iSCSI transport's _write_ side (sending blocks directly to a Nutanix Volume Group)
 is also fragile: hard to inspect, hard to retry, and dependent on iSCSI connectivity.
 
+### Root Cause Investigation (2026-03-23/24)
+
+Extensive debugging on ubuntu10 (50 GB, Ubuntu 24.04, UEFI, thin-provisioned) revealed:
+
+**Symptoms:**
+- iSCSI T0 reports 50 GB read + 50 GB written, no errors
+- VG has valid GPT at LBA 0, valid FAT32 on gpt1 (0-1GB)
+- gpt2 and gpt3 (ext4, 1GB-50GB) = ALL ZEROS (`file -s` shows "data" not ext4)
+- Stream transport (NFC) produces a bootable VM with identical source data
+
+**Eliminated causes:**
+- iSCSI write bugs (ITT corruption, NOP-In handling) — no NOP-Ins observed during transfer
+- Snapshot chain / incomplete consolidation — `consolidationNeeded: false`, no delta files
+- Sector size mismatch, LBA overflow — all within safe ranges
+
+**Confirmed root cause: Thin provisioning + ESXi HTTP serving**
+
+```
+Datastore evidence:
+  govc device.info:     File: [ssd-002032] ubuntu10/ubuntu10.vmdk
+  govc datastore.ls:    ubuntu10.vmdk = 6.6 GB (allocated)
+  Virtual size:         50 GB
+  HTTP download:        52.58 GB (zero-fills unallocated regions)
+```
+
+The disk is thin-provisioned with only 6.6 GB allocated on VMFS. The ESXi HTTP
+server at `/folder/disk-flat.vmdk` serves the full virtual size but does **not
+correctly map thin VMDK grain tables to virtual offsets**. Allocated blocks
+(including the ext4 superblock) are served as zeros at their virtual offset
+positions, even though the data exists in the 6.6 GB of allocated grains.
+
+**NFC `ExportSnapshot` works because** it goes through VMware's internal virtual
+disk layer which correctly resolves thin VMDK grain mapping + snapshot chains.
+The HTTP `/folder/` endpoint serves the raw VMFS file without this resolution.
+
+**This is not fixable in our code** — it's a limitation of the ESXi HTTP datastore
+access for thin-provisioned VMDKs. The flat VMDK HTTP approach is fundamentally
+unreliable for thin disks.
+
+### Impact
+
+- `RawDiskReader` (used by iSCSI T0 when CBT fails): **BROKEN for thin disks**
+- `RangeReader` (used by iSCSI T1 for delta reads): **BROKEN for thin disks**
+- `DiskReader` via NFC (used by stream transport): **WORKS correctly**
+
+This affects ALL thin-provisioned VMDKs, which is the default for most modern
+VMware deployments. Thick eager-zeroed VMDKs may work correctly via HTTP but
+this is not the common case.
+
 ## Proposed Solution: Local Block Repository
 
 Maintain a **local raw disk image file** on the migration host that serves as the
@@ -157,24 +206,87 @@ for _, extent := range changedExtents {
 This is the critical difference from the current stream transport, which re-downloads
 the entire disk on every sync. Here we only read and write the changed blocks.
 
-**Reading changed extents — two options:**
+**How T1 patching works (the key concept):**
 
-| Method | Pros | Cons |
-|--------|------|------|
-| **NFC Lease + Read** | Correct snapshot chain handling, same auth as T0 | Need to seek within stream or use VDDK-style random read |
-| **HTTP Range (datastore)** | True random access via Range headers, simple | Only works for the current snapshot's flat file — same bug as iSCSI for chained snapshots |
+The raw repository file is a living document. Each sync patches it in-place:
 
-Recommendation: Use **NFC** for correctness. If the NFC stream is sequential-only,
-read the full snapshot via NFC into a temp file, then extract the changed extents.
-For small deltas this is wasteful, but correctness trumps performance.
+```
+After T0:  disk-0.raw = complete disk (all blocks from NFC export)
+After T1:  disk-0.raw = T0 + T1 changed blocks overwritten at exact offsets
+After T2:  disk-0.raw = T0 + T1 + T2 merged in-place
+After TN:  disk-0.raw = always a complete, bootable disk image
+```
 
-Alternative: Use the **VDDK** (VMware Virtual Disk Development Kit) via cgo if
-random-access reads from a snapshot are needed. This is what Veeam does. However,
-VDDK has licensing and platform constraints.
+At any point, you can convert `disk-0.raw` → qcow2 → upload → create VM.
+There are no separate delta files to chain or merge.
 
-Practical middle ground for our use case: If the delta is small (< 5% of disk),
-re-reading the full disk via NFC and extracting changed regions is acceptable.
-If the delta is large, the full re-read is necessary anyway.
+**Reading changed extents — four strategies:**
+
+| Strategy | Method | Reads | Correct? | Performance |
+|----------|--------|-------|----------|-------------|
+| **A** | Full NFC re-read + extract | Entire disk | Yes | Bad — 300 GB for 100 MB delta |
+| **B** | HTTP Range (flat VMDK) | Only deltas | **No** — same snapshot bug | Good for simple cases |
+| **C** | VDDK random read | Only deltas | Yes | Best — but needs C bindings |
+| **D (recommended)** | NFC lease + selective read | Only deltas | Yes | Good — reads only what changed |
+
+**Strategy D: NFC Lease + Selective Read (recommended)**
+
+The NFC `ExportSnapshot` lease gives access to the full disk as a sequential
+stream. But we don't need to download ALL of it. The approach:
+
+1. CBT gives us changed extents: `[(offset=1GB, len=64KB), (offset=5GB, len=1MB), ...]`
+2. Open NFC lease for the snapshot (same as T0)
+3. Read the NFC stream sequentially, but **only keep data that falls within changed extents**
+4. Discard all other data (skip over it)
+5. Write kept data to `disk-0.raw` at exact offsets via `WriteAt()`
+
+```go
+// Pseudocode for Strategy D
+nfcStream := openNFCExport(snapshot, disk)
+changedMap := buildExtentMap(cbtExtents)  // quick lookup: is offset in a changed region?
+
+offset := int64(0)
+for {
+    chunk := readFromNFC(nfcStream, 64*1024*1024)  // 64 MB at a time
+    if chunk == nil { break }
+
+    // Check which parts of this chunk overlap with changed extents
+    for _, overlap := range changedMap.Overlapping(offset, len(chunk)) {
+        // Extract just the changed bytes and patch the repository
+        data := chunk[overlap.Start-offset : overlap.End-offset]
+        repo.WriteAt(data, overlap.Start)
+    }
+    offset += int64(len(chunk))
+}
+```
+
+This reads the full NFC stream but only writes changed blocks to the repository.
+The network cost is still the full disk size, but:
+- It is **correct** (NFC handles snapshot chains)
+- The disk I/O is minimal (only changed blocks written)
+- No VDDK dependency
+
+**Future optimization:** If NFC sequential read is too slow for large disks with
+tiny deltas, implement Strategy C (VDDK) for true random access. Or investigate
+whether govmomi's NFC lease supports seeking (HTTP Range on the NFC URL).
+
+**Alternative for known-safe scenarios (no snapshot chain):**
+
+If we can guarantee there is **exactly one snapshot** (ours) and no pre-existing
+chain, then the flat VMDK accurately represents the pre-snapshot state, and HTTP
+Range reads (Strategy B) are safe for the delta. This can be validated by checking
+the snapshot tree before reading. Use Strategy B with a safety check:
+
+```go
+// Only use HTTP Range if snapshot chain is simple (our snapshot only)
+if len(snapshotTree) == 1 && snapshotTree[0].Name == ourSnapshotName {
+    // Safe to use HTTP Range reads from flat VMDK
+    useStrategyB()
+} else {
+    // Fall back to NFC sequential read (Strategy D)
+    useStrategyD()
+}
+```
 
 ### Cutover
 
@@ -358,16 +470,86 @@ The current `stream` transport already does most of T0. Refactor to:
 - `internal/repository/convert.go` — qemu-img wrapper
 - `internal/repository/metadata.go` — metadata read/write
 
-### Phase 2: T1 Incremental Patching
+### Phase 2: T1 Incremental Patching — Delta-Only Read via NFC
 
-1. Implement CBT query for changed extents (already exists in `vmware` package)
-2. Implement NFC-based extent reader for changed blocks
-3. Implement `WriteAt()` patcher for the raw repository file
-4. Wire up: CBT query -> read extents -> patch -> convert -> upload
+The critical requirement: **only transfer changed blocks at T1, not the whole VM.**
+
+CBT tells us WHAT changed. The question is HOW to read just those bytes.
+
+**NFC approach for delta-only reads:**
+
+govmomi's NFC `ExportSnapshot` returns a sequential streamOptimized VMDK stream.
+This is NOT random-access — you can't seek to offset 5 GB and read 1 MB. But the
+streamOptimized VMDK format has a key property: it contains **grain tables** that
+map virtual offsets to positions in the stream. The grains that correspond to
+unallocated/unchanged regions are stored as zero markers (tiny metadata), not
+full data blocks.
+
+**Practical approach for delta reads:**
+
+```
+Step 1: CBT query → changed extents list
+        [(offset=1GB, len=64KB), (offset=5GB, len=1MB), ...]
+
+Step 2: NFC ExportSnapshot → streamOptimized VMDK stream
+        Read the stream, parse VMDK grain table headers
+        For each grain (typically 64KB):
+          - If grain offset falls within a changed extent → save the data
+          - If grain offset is NOT in a changed extent → skip/discard
+        This is a single sequential pass over the NFC stream.
+
+Step 3: Patch repository
+        For each saved grain:
+          repo.WriteAt(grainData, grainOffset)
+
+Step 4: Convert raw → qcow2, upload, create VM
+```
+
+**Why this works efficiently:**
+
+The NFC stream transfers only ALLOCATED grains. For a 50 GB disk with 6 GB of
+actual data, the NFC stream is ~6 GB (compressed). We read the full 6 GB stream
+but only write the changed grains to the repository. For a typical T1 with 100 MB
+of changes, we read 6 GB over the network but only patch 100 MB to disk.
+
+**Even better: govmomi HTTP download with Range headers on NFC URL**
+
+The NFC lease provides an HTTPS URL for the disk. We may be able to use HTTP Range
+requests on this URL to read specific byte ranges, getting true random access
+through the snapshot chain. This needs investigation — if it works, T1 would
+transfer ONLY the delta bytes:
+
+```go
+// Potential approach — needs testing
+lease := nfc.ExportSnapshot(snapshot)
+diskURL := lease.URLs[diskKey]  // HTTPS URL for the disk
+
+for _, extent := range changedExtents {
+    req, _ := http.NewRequest("GET", diskURL, nil)
+    req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", extent.Offset, extent.Offset+extent.Length-1))
+    resp, _ := http.Do(req)
+    data, _ := io.ReadAll(resp.Body)
+    repo.WriteAt(data, extent.Offset)
+}
+```
+
+If NFC URLs support Range headers, this is the optimal solution — delta-only
+network transfer + delta-only disk write. Same correctness as NFC (handles
+snapshot chains) with the efficiency of HTTP Range requests.
+
+**TODO: Investigate whether govmomi NFC lease URLs support HTTP Range requests.**
+
+**Implementation steps:**
+
+1. CBT query for changed extents (already exists in `vmware` package)
+2. Test NFC URL Range support — if it works, implement random-access delta reader
+3. Fallback: sequential NFC stream + grain filter (read all, save only changed)
+4. Implement `WriteAt()` patcher for the raw repository file
+5. Wire up: CBT query → read deltas → patch → convert → upload
 
 **Files to add:**
-- `internal/repository/incremental.go` — CBT + patch logic
-- `internal/repository/nfc_reader.go` — read changed extents via NFC
+- `internal/repository/incremental.go` — CBT + patch + convert + upload
+- `internal/repository/nfc_delta_reader.go` — read changed extents via NFC
 
 ### Phase 3: Cutover Workflow
 
