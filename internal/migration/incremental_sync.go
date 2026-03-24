@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/rs/zerolog/log"
 
 	"github.com/nitinmore/datamigrate/internal/blockio"
+	"github.com/nitinmore/datamigrate/internal/repository"
 	"github.com/nitinmore/datamigrate/internal/state"
 	"github.com/nitinmore/datamigrate/internal/util"
 	"github.com/nitinmore/datamigrate/internal/vmware"
@@ -125,6 +127,69 @@ func (o *Orchestrator) IncrementalSync(ctx context.Context) error {
 			Msg("incremental sync for disk")
 
 		progress.AddDisk(disk.Key, diskChanged)
+
+		// Repository transport: NFC → temp VMDK → temp raw → patch extents → qcow2 → upload
+		if ms.Transport == state.TransportRepository {
+			nfcReader, err := o.vmClient.OpenDiskReader(ctx, vm, snapRef, diskInfo)
+			if err != nil {
+				return fmt.Errorf("opening NFC reader for T1: %w", err)
+			}
+
+			stagingDir := o.plan.Staging.Directory
+			if stagingDir == "" {
+				stagingDir = "/tmp/datamigrate"
+			}
+			diskDir := filepath.Join(stagingDir, o.plan.Name)
+
+			rawPath := disk.LocalPath // repository raw file from T0
+			if rawPath == "" {
+				rawPath = filepath.Join(diskDir, fmt.Sprintf("disk-%d.raw", disk.Key))
+			}
+
+			fmt.Printf("  Incremental sync (repository): %d changed areas, %d MB\n",
+				len(extents), diskChanged/(1024*1024))
+
+			patchedBytes, err := repository.RunT1(ctx, nfcReader.StreamReader(), repository.T1Config{
+				StagingDir:     diskDir,
+				DiskKey:        disk.Key,
+				Capacity:       disk.CapacityB,
+				RawPath:        rawPath,
+				ChangedExtents: extents,
+			})
+			nfcReader.Close()
+			if err != nil {
+				return fmt.Errorf("repository T1: %w", err)
+			}
+
+			fmt.Printf("  Patched %d MB into repository\n", patchedBytes/(1024*1024))
+
+			// Upload updated qcow2
+			qcow2Path := filepath.Join(diskDir, fmt.Sprintf("disk-%d.qcow2", disk.Key))
+			imageName := fmt.Sprintf("%s-disk-%d-t%d-%s", o.plan.VMName, disk.Key, ms.SyncCount, time.Now().Format("20060102-150405"))
+			fmt.Printf("  Creating image %q...\n", imageName)
+
+			qcow2Stat, err := os.Stat(qcow2Path)
+			if err != nil {
+				return fmt.Errorf("stating qcow2: %w", err)
+			}
+
+			imageUUID, err := o.nxClient.CreateImage(ctx, imageName, qcow2Stat.Size())
+			if err != nil {
+				return fmt.Errorf("creating image: %w", err)
+			}
+
+			fmt.Printf("  Uploading qcow2 (%d MB)...\n", qcow2Stat.Size()/(1024*1024))
+			if err := o.nxClient.UploadImage(ctx, imageUUID, qcow2Path); err != nil {
+				return fmt.Errorf("uploading image: %w", err)
+			}
+			fmt.Println("  Image uploaded successfully.")
+
+			disk.ImageUUID = imageUUID
+			disk.ChangeID = newChangeID
+			disk.BytesCopied += diskChanged
+			disk.LastSyncedAt = time.Now()
+			continue
+		}
 
 		// Open reader — iSCSI needs RangeReader for correct offset writes,
 		// stream/image uses NFC reader (sequential stream)
