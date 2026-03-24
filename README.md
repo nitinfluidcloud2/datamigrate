@@ -55,6 +55,32 @@ VMware snapshot ──NFC export──▶ streamOptimized VMDK (compressed, spar
 
 **Incremental syncs:** Not supported — each run creates a full new image.
 
+### `--transport repository` (recommended, Mac/Linux)
+
+The most reliable mode. Reads the full disk via NFC export (correctly handles thin-provisioned disks and snapshot chains), converts to a local raw file, then to compressed qcow2, and uploads to Nutanix. Supports incremental syncs via CBT.
+
+```
+VMware snapshot ──NFC export──▶ streamOptimized VMDK
+                                      │
+                                Save to temp file
+                                      │
+                                qemu-img convert vmdk → raw (disk-0.raw)
+                                      │
+                                qemu-img convert raw → qcow2 (compressed)
+                                      │
+                                Upload qcow2 ──HTTP PUT──▶ Nutanix Image Store
+                                      │
+                                createvm (from image UUID in state DB)
+```
+
+**Requires:** `qemu-img` installed, local disk space for raw + qcow2 (~1.2x disk size)
+
+**Where data lives:** Local raw file (`disk-0.raw`) is the repository — always a complete, bootable disk. Nutanix **Image Store** has the latest qcow2 upload.
+
+**Incremental syncs:** CBT identifies changed blocks → NFC re-reads full disk → only changed blocks patched into raw file → convert → re-upload. (Future: VDDK for delta-only reads.)
+
+**VM creation:** Automatic via `createvm` command — reads image UUID from state DB.
+
 ### `--transport image` (legacy fallback)
 
 Writes blocks to a local raw file, converts to qcow2, then uploads. Similar to stream but uses the block pipeline instead of NFC.
@@ -63,17 +89,48 @@ Writes blocks to a local raw file, converts to qcow2, then uploads. Similar to s
 
 ### Comparison
 
-| | iSCSI (production) | Stream (testing) | Image (legacy) |
-|---|---|---|---|
-| **OS** | Linux only | Any (Mac/Linux) | Any |
-| **Read method** | Datastore HTTPS (raw flat bytes) | NFC export (streamOptimized VMDK) | NFC export |
-| **Write method** | iSCSI WriteAt to Volume Group | HTTP PUT to Image Store | Local qcow2 → HTTP PUT |
-| **Local disk** | None | VMDK + qcow2 temp files | Raw + qcow2 staging |
-| **Dependencies** | open-iscsi | qemu-img | qemu-img |
-| **Incremental** | Yes (CBT deltas) | No (full each time) | No |
-| **Speed** | Fastest (direct block I/O) | Moderate | Slowest |
-| **Nutanix target** | Volume Group | Image Store | Image Store |
-| **VM creation** | From VG disks (no copy) | Manual from image | Manual from image |
+| | Repository (recommended) | iSCSI | Stream (testing) | Image (legacy) |
+|---|---|---|---|---|
+| **OS** | Any (Mac/Linux) | Linux only | Any (Mac/Linux) | Any |
+| **Read method** | NFC export (correct for thin disks) | Datastore HTTPS (broken for thin) | NFC export | NFC export |
+| **Write method** | Local raw file → qcow2 → upload | iSCSI WriteAt to Volume Group | HTTP PUT to Image Store | Local qcow2 → HTTP PUT |
+| **Local disk** | Raw + qcow2 (~1.2x disk) | None | VMDK + qcow2 temp files | Raw + qcow2 staging |
+| **Dependencies** | qemu-img | Pure Go iSCSI | qemu-img | qemu-img |
+| **Incremental** | Yes (CBT + NFC re-read) | Yes (CBT deltas) | No (full each time) | No |
+| **Thin disk safe** | ✅ Yes | ❌ No (data corruption) | ✅ Yes | ✅ Yes |
+| **VM creation** | `createvm` (auto from state) | `createvm --volume-group` | Manual from image | Manual from image |
+
+## Quick Start (Repository Transport)
+
+```bash
+# 1. Build
+make build-linux
+
+# 2. Deploy to migration host
+scp bin/datamigrate-linux-amd64 user@migration-host:~/datamigrate
+
+# 3. Discover VMs on vCenter
+./datamigrate discover --vcenter <vcenter-url> --username <user>
+
+# 4. Create migration plan
+./datamigrate plan create --vm <vm-name> --transport repository
+
+# 5. Run T0 full sync (NFC → VMDK → raw → qcow2 → upload to Nutanix)
+./datamigrate migrate start --plan configs/<vm-name>-plan.yaml
+
+# 6. Create VM on Nutanix AHV (reads image UUID from state DB)
+./datamigrate createvm --plan configs/<vm-name>-plan.yaml --boot-type UEFI --power-on
+
+# 7. Verify VM boots in Prism Central
+
+# 8. (Optional) Run incremental syncs before cutover
+./datamigrate migrate sync --plan configs/<vm-name>-plan.yaml
+
+# 9. Cleanup when done
+./datamigrate cleanup --plan configs/<vm-name>-plan.yaml
+```
+
+**Tested:** Ubuntu 24.04 (UEFI, 50 GB, thin-provisioned) and RHEL 6 (Legacy BIOS, 10 GB) — both boot on AHV.
 
 ## Migration Lifecycle
 
