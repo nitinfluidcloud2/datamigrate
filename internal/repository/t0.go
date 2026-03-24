@@ -22,6 +22,8 @@ type T0Config struct {
 // RunT0 orchestrates the T0 flow: NFC stream -> save to temp VMDK file -> parse
 // VMDK -> write raw file -> convert to qcow2. Returns the qcow2 path and size.
 func RunT0(ctx context.Context, nfcStream io.Reader, cfg T0Config) (qcow2Path string, qcow2Size int64, err error) {
+	t0Start := time.Now()
+
 	// Step 0: Check qemu-img is available
 	if err := CheckQemuImg(); err != nil {
 		return "", 0, err
@@ -38,19 +40,20 @@ func RunT0(ctx context.Context, nfcStream io.Reader, cfg T0Config) (qcow2Path st
 
 	// Step 2: Save NFC stream to temp VMDK file with progress logging
 	log.Info().Str("vmdk_path", vmdkPath).Msg("saving NFC VMDK stream to file")
-
+	nfcStart := time.Now()
 	written, err := saveStreamToFile(ctx, nfcStream, vmdkPath, cfg.Capacity)
 	if err != nil {
 		return "", 0, fmt.Errorf("saving NFC stream: %w", err)
 	}
+	nfcElapsed := time.Since(nfcStart).Truncate(time.Second)
 	log.Info().
 		Int64("bytes_written_mb", written/(1024*1024)).
-		Str("vmdk_path", vmdkPath).
+		Str("elapsed", nfcElapsed.String()).
 		Msg("VMDK stream saved")
 
 	// Step 3: Convert VMDK -> raw using qemu-img (handles streamOptimized format correctly)
 	log.Info().Str("vmdk", vmdkPath).Str("raw", rawPath).Msg("converting VMDK to raw via qemu-img")
-	start := time.Now()
+	convertStart := time.Now()
 	if err := ConvertVMDKToRaw(vmdkPath, rawPath); err != nil {
 		return "", 0, fmt.Errorf("converting VMDK to raw: %w", err)
 	}
@@ -58,9 +61,10 @@ func RunT0(ctx context.Context, nfcStream io.Reader, cfg T0Config) (qcow2Path st
 	if err != nil {
 		return "", 0, fmt.Errorf("stating raw file: %w", err)
 	}
+	vmdkToRawElapsed := time.Since(convertStart).Truncate(time.Second)
 	log.Info().
 		Int64("raw_size_mb", rawStat.Size()/(1024*1024)).
-		Str("elapsed", time.Since(start).Truncate(time.Second).String()).
+		Str("elapsed", vmdkToRawElapsed.String()).
 		Msg("VMDK → raw conversion complete")
 
 	// Step 4: Verify raw file
@@ -69,9 +73,11 @@ func RunT0(ctx context.Context, nfcStream io.Reader, cfg T0Config) (qcow2Path st
 	}
 
 	// Step 5: Convert raw -> qcow2
+	rawToQcow2Start := time.Now()
 	if err := ConvertRawToQcow2(rawPath, qcow2Path); err != nil {
 		return "", 0, fmt.Errorf("converting raw to qcow2: %w", err)
 	}
+	rawToQcow2Elapsed := time.Since(rawToQcow2Start).Truncate(time.Second)
 
 	qcow2Stat, err := os.Stat(qcow2Path)
 	if err != nil {
@@ -84,10 +90,18 @@ func RunT0(ctx context.Context, nfcStream io.Reader, cfg T0Config) (qcow2Path st
 		log.Warn().Err(err).Str("vmdk", vmdkPath).Msg("failed to remove temp VMDK")
 	}
 
-	log.Info().
-		Str("qcow2_path", qcow2Path).
-		Int64("qcow2_size_mb", qcow2Size/(1024*1024)).
-		Msg("T0 complete")
+	// Print summary
+	totalElapsed := time.Since(t0Start).Truncate(time.Second)
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("  T0 Repository Sync Summary")
+	fmt.Println("=========================================")
+	fmt.Printf("  NFC download:     %s (%d MB compressed)\n", nfcElapsed, written/(1024*1024))
+	fmt.Printf("  VMDK → raw:       %s (%d MB)\n", vmdkToRawElapsed, rawStat.Size()/(1024*1024))
+	fmt.Printf("  raw → qcow2:      %s (%d MB compressed)\n", rawToQcow2Elapsed, qcow2Size/(1024*1024))
+	fmt.Printf("  Total:            %s\n", totalElapsed)
+	fmt.Println("=========================================")
+	fmt.Println()
 
 	return qcow2Path, qcow2Size, nil
 }
@@ -197,16 +211,20 @@ func saveStreamToFile(ctx context.Context, r io.Reader, path string, totalSize i
 		}
 
 		if time.Since(lastLog) >= 10*time.Second {
-			pct := float64(0)
 			if totalSize > 0 {
-				pct = float64(total) / float64(totalSize) * 100
+				pct := float64(total) / float64(totalSize) * 100
+				log.Info().
+					Int64("bytes_mb", total/(1024*1024)).
+					Int64("total_mb", totalSize/(1024*1024)).
+					Float64("pct", pct).
+					Msg("saving NFC stream progress")
+				fmt.Printf("\r  NFC download: %.1f%% (%d / %d MB)", pct, total/(1024*1024), totalSize/(1024*1024))
+			} else {
+				log.Info().
+					Int64("bytes_mb", total/(1024*1024)).
+					Msg("saving NFC stream progress")
+				fmt.Printf("\r  NFC download: %d MB", total/(1024*1024))
 			}
-			log.Info().
-				Int64("bytes_mb", total/(1024*1024)).
-				Int64("total_mb", totalSize/(1024*1024)).
-				Float64("pct", pct).
-				Msg("saving NFC stream progress")
-			fmt.Printf("\r  NFC download: %.1f%% (%d / %d MB)", pct, total/(1024*1024), totalSize/(1024*1024))
 			lastLog = time.Now()
 		}
 	}

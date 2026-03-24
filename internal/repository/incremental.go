@@ -30,6 +30,8 @@ type T1Config struct {
 // 5. Convert patched raw → qcow2
 // Returns bytes patched.
 func RunT1(ctx context.Context, nfcStream io.Reader, cfg T1Config) (int64, error) {
+	t1Start := time.Now()
+
 	if err := CheckQemuImg(); err != nil {
 		return 0, err
 	}
@@ -42,25 +44,34 @@ func RunT1(ctx context.Context, nfcStream io.Reader, cfg T1Config) (int64, error
 	tempRaw := filepath.Join(cfg.StagingDir, fmt.Sprintf("disk-%d-t1.raw", cfg.DiskKey))
 	qcow2Path := filepath.Join(cfg.StagingDir, fmt.Sprintf("disk-%d.qcow2", cfg.DiskKey))
 
+	// Calculate total changed bytes for summary
+	var totalChanged int64
+	for _, ext := range cfg.ChangedExtents {
+		totalChanged += ext.Length
+	}
+
 	// Step 1: Save NFC stream to temp VMDK
+	// Note: NFC stream size is unknown upfront (compressed), use 0 to show bytes only
 	log.Info().Str("vmdk", tempVMDK).Msg("T1: saving NFC stream to temp VMDK")
-	start := time.Now()
-	written, err := saveStreamToFile(ctx, nfcStream, tempVMDK, cfg.Capacity)
+	nfcStart := time.Now()
+	written, err := saveStreamToFile(ctx, nfcStream, tempVMDK, 0)
 	if err != nil {
 		return 0, fmt.Errorf("saving NFC stream: %w", err)
 	}
+	nfcElapsed := time.Since(nfcStart).Truncate(time.Second)
 	log.Info().
 		Int64("bytes_mb", written/(1024*1024)).
-		Str("elapsed", time.Since(start).Truncate(time.Second).String()).
+		Str("elapsed", nfcElapsed.String()).
 		Msg("T1: VMDK stream saved")
 
 	// Step 2: Convert temp VMDK → temp raw
 	log.Info().Msg("T1: converting temp VMDK → temp raw")
-	start = time.Now()
+	convertStart := time.Now()
 	if err := ConvertVMDKToRaw(tempVMDK, tempRaw); err != nil {
 		return 0, fmt.Errorf("converting temp VMDK to raw: %w", err)
 	}
-	log.Info().Str("elapsed", time.Since(start).Truncate(time.Second).String()).Msg("T1: temp raw ready")
+	vmdkToRawElapsed := time.Since(convertStart).Truncate(time.Second)
+	log.Info().Str("elapsed", vmdkToRawElapsed.String()).Msg("T1: temp raw ready")
 
 	// Step 3: Read changed extents from temp raw, patch into repository raw
 	log.Info().
@@ -68,27 +79,48 @@ func RunT1(ctx context.Context, nfcStream io.Reader, cfg T1Config) (int64, error
 		Str("repo_raw", cfg.RawPath).
 		Msg("T1: patching changed extents into repository")
 
-	start = time.Now()
+	patchStart := time.Now()
 	patched, err := patchExtents(cfg.RawPath, tempRaw, cfg.ChangedExtents)
 	if err != nil {
 		return 0, fmt.Errorf("patching extents: %w", err)
 	}
+	patchElapsed := time.Since(patchStart).Truncate(time.Second)
 	log.Info().
 		Int64("patched_mb", patched/(1024*1024)).
-		Str("elapsed", time.Since(start).Truncate(time.Second).String()).
+		Str("elapsed", patchElapsed.String()).
 		Msg("T1: repository patched")
 
 	// Step 4: Convert patched raw → qcow2
 	log.Info().Msg("T1: converting patched raw → qcow2")
-	start = time.Now()
+	rawToQcow2Start := time.Now()
 	if err := ConvertRawToQcow2(cfg.RawPath, qcow2Path); err != nil {
 		return 0, fmt.Errorf("converting raw to qcow2: %w", err)
 	}
-	log.Info().Str("elapsed", time.Since(start).Truncate(time.Second).String()).Msg("T1: qcow2 ready")
+	rawToQcow2Elapsed := time.Since(rawToQcow2Start).Truncate(time.Second)
+
+	qcow2Stat, err := os.Stat(qcow2Path)
+	if err != nil {
+		return 0, fmt.Errorf("stating qcow2: %w", err)
+	}
 
 	// Step 5: Cleanup temp files
 	os.Remove(tempVMDK)
 	os.Remove(tempRaw)
+
+	// Print summary
+	totalElapsed := time.Since(t1Start).Truncate(time.Second)
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("  T1 Incremental Sync Summary")
+	fmt.Println("=========================================")
+	fmt.Printf("  Changed extents:  %d (%d MB)\n", len(cfg.ChangedExtents), totalChanged/(1024*1024))
+	fmt.Printf("  NFC download:     %s (%d MB compressed)\n", nfcElapsed, written/(1024*1024))
+	fmt.Printf("  VMDK → raw:       %s\n", vmdkToRawElapsed)
+	fmt.Printf("  Patch extents:    %s (%d MB patched)\n", patchElapsed, patched/(1024*1024))
+	fmt.Printf("  raw → qcow2:      %s (%d MB compressed)\n", rawToQcow2Elapsed, qcow2Stat.Size()/(1024*1024))
+	fmt.Printf("  Total:            %s\n", totalElapsed)
+	fmt.Println("=========================================")
+	fmt.Println()
 
 	return patched, nil
 }
