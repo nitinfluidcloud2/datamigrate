@@ -375,38 +375,67 @@ if len(snapshotTree) == 1 && snapshotTree[0].Name == ourSnapshotName {
 }
 ```
 
-## Comparison with Existing Transports
+## Comparison of All Migration Approaches
 
-```
-                    stream          iscsi             repository (new)
-                    ------          -----             ----------------
-T0 read method      NFC (correct)   Datastore HTTP    NFC (correct)
-                                    (BROKEN for
-                                     snapshots)
+### Approach Summary
 
-T0 write target     Local VMDK      Nutanix VG        Local raw file
-                    + qcow2 upload  (direct iSCSI)    + qcow2 upload
+| | 1. OVFTool/govc Export | 2. Stream (NFC) | 3. iSCSI (Direct VG) | 4. Repository (Proposed) |
+|---|---|---|---|---|
+| **Read method** | OVF export (NFC internally) | NFC `ExportSnapshot` | HTTP flat VMDK from datastore | NFC `ExportSnapshot` |
+| **Write target** | Local VMDK → qcow2 → upload | Local VMDK → qcow2 → upload | Nutanix Volume Group (iSCSI) | Local raw file → qcow2 → upload |
+| **Thin disk safe?** | Yes | Yes | **NO** | Yes |
+| **Snapshot safe?** | Yes | Yes | **NO** | Yes |
 
-T1 read method      NFC full disk   Datastore HTTP    NFC (changed
-                    (re-downloads   (reads flat VMDK   extents only)
-                     everything)     — BROKEN)
+### T0 Full Sync
 
-T1 write method     Full re-upload  WriteAt to VG     WriteAt to local
-                                    via iSCSI         file, then upload
+| | OVFTool/govc | Stream | iSCSI | Repository |
+|---|---|---|---|---|
+| **Network transfer** | ~6 GB compressed | ~6 GB compressed | 50 GB raw | ~6 GB compressed |
+| **Time (50 GB, 1 Gbps)** | ~10-15 min | ~10-15 min | ~10 min | ~10-15 min |
+| **Local disk needed** | ~2x disk | ~2x disk | None (remote VG) | ~2x disk |
+| **Data correctness** | Correct | Correct | **BROKEN** | Correct |
 
-Inspectable?        Yes (file)      No (VG opaque)    Yes (file)
+### T1..TN Incremental Sync
 
-Retry on failure?   Restart full    Complex (iSCSI    Re-read extent,
-                    export          reconnect)        re-patch file
+| | OVFTool/govc | Stream | iSCSI | Repository |
+|---|---|---|---|---|
+| **CBT support** | No | No (re-exports full) | Yes (delta only) | Yes (delta + full upload) |
+| **Network (100 MB changed)** | Full disk | Full disk | **100 MB only** | ~6 GB (delta + qcow2 upload) |
+| **Time (50 GB, 100 MB delta)** | ~10-15 min | ~10-15 min | ~30 sec | ~5-8 min |
+| **Data correctness** | Correct | Correct | **BROKEN** | Correct |
 
-Platform needs      qemu-img        iSCSI initiator   qemu-img
-                                    (or pure-Go)
+### Cutover Downtime
 
-Disk space needed   ~1x disk size   None (remote)     ~1x disk size
-on migration host
+| | OVFTool/govc | Stream | iSCSI | Repository |
+|---|---|---|---|---|
+| **50 GB disk** | 15-20 min | 15-20 min | 2-5 min | 5-10 min |
+| **300 GB disk** | 60-90 min | 60-90 min | 5-10 min | 15-25 min |
 
-Data correctness    CORRECT         BROKEN            CORRECT
-```
+### Reliability & Operations
+
+| | OVFTool/govc | Stream | iSCSI | Repository |
+|---|---|---|---|---|
+| **Retry on failure** | Restart full | Restart full | Complex (iSCSI reconnect) | Re-patch file |
+| **Inspectable?** | Yes (files) | Yes (files) | No (VG opaque) | Yes (raw file) |
+| **Verify before boot** | Mount qcow2 | Mount qcow2 | Can't inspect VG | Mount raw file |
+| **Automation** | Manual CLI | Automated | Automated | Automated |
+| **Works on Mac?** | Yes | Yes | Yes (pure Go) | Yes |
+
+### Total Network Cost (300 GB disk, 10 syncs, 5 GB daily delta)
+
+| | OVFTool/govc | Stream | iSCSI | Repository |
+|---|---|---|---|---|
+| **Total transfer** | **600 GB** | **600 GB** | **345 GB** | **645 GB** |
+| **Local disk** | ~120 GB | ~120 GB | 0 GB | ~360 GB |
+
+### Verdict
+
+| Approach | Status | Best For |
+|---|---|---|
+| **OVFTool/govc** | Works, no incremental | One-time manual migrations |
+| **Stream** | ✅ Working, tested | POC, small VMs |
+| **iSCSI** | ❌ Broken (thin disk bug) | Would be ideal if fixed (VDDK) |
+| **Repository** | 🔧 To implement | Production — correct + incremental |
 
 ## Advantages
 
