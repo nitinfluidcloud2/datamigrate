@@ -41,7 +41,7 @@ func RunT0(ctx context.Context, nfcStream io.Reader, cfg T0Config) (qcow2Path st
 	// Step 2: Save NFC stream to temp VMDK file with progress logging
 	log.Info().Str("vmdk_path", vmdkPath).Msg("saving NFC VMDK stream to file")
 	nfcStart := time.Now()
-	written, err := saveStreamToFile(ctx, nfcStream, vmdkPath, cfg.Capacity)
+	written, err := saveStreamToFile(ctx, nfcStream, vmdkPath, 0)
 	if err != nil {
 		return "", 0, fmt.Errorf("saving NFC stream: %w", err)
 	}
